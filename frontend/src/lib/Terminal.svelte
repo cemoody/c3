@@ -57,6 +57,10 @@
     const fontSize = calcFontSize(cols);
     terminal.options.fontSize = fontSize;
     terminal.resize(cols, rows);
+    // Re-focus after resize — resizing can drop focus
+    if (!isMobile) terminal.focus();
+    // On mobile, scroll to bottom so the input prompt is visible
+    terminal.scrollToBottom();
   }
 
   onMount(() => {

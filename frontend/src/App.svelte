@@ -93,6 +93,10 @@
       } else {
         showJumpToLive = false;
       }
+      // Keep terminal focused when document is active
+      if (pageMode === 'session' && !document.hidden && terminalRef) {
+        terminalRef.focusTerminal();
+      }
     }, 500);
 
     return () => {
