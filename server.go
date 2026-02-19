@@ -14,12 +14,24 @@ import (
 //go:embed frontend/dist/*
 var frontendFS embed.FS
 
-func NewServer(cfg *Config, sm *SessionManager, logger *slog.Logger) *http.ServeMux {
+func NewServer(cfg *Config, sm *SessionManager, indexer *FileIndexer, logger *slog.Logger) *http.ServeMux {
 	mux := http.NewServeMux()
 
 	// File browser endpoints
 	mux.HandleFunc("GET /api/files", NewFilesHandler(logger))
 	mux.HandleFunc("GET /api/files/raw", NewFileContentHandler(logger))
+
+	// File search endpoint
+	mux.HandleFunc("GET /api/search", func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query().Get("q")
+		results := indexer.Search(q, 50)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{
+			"query":   q,
+			"results": results,
+			"indexed": indexer.Count(),
+		})
+	})
 
 	// Rename tmux window
 	mux.HandleFunc("POST /api/rename", func(w http.ResponseWriter, r *http.Request) {

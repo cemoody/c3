@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
 
   type FileEntry = { name: string; isDir: boolean; size: number };
 
@@ -9,8 +9,16 @@
   let previewUrl = $state<string | null>(null);
   let previewName = $state('');
 
+  // Search state
+  let searchQuery = $state('');
+  let searchResults = $state<string[]>([]);
+  let searchActive = $state(false);
+  let selectedIndex = $state(0);
+  let indexedCount = $state(0);
+  let searchInputEl: HTMLInputElement;
+  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
   function getInitialPath(): string {
-    // Try to get from URL hash, otherwise use home
     const hash = location.hash.replace('#', '');
     return hash || '';
   }
@@ -56,23 +64,24 @@
     return /\.(png|jpg|jpeg|gif|webp|svg|pdf|html)$/i.test(name);
   }
 
-  function openFile(name: string) {
-    const filePath = currentPath + '/' + name;
+  function openFilePath(filePath: string) {
+    const name = filePath.split('/').pop() || filePath;
     if (isImage(name)) {
       previewUrl = `/api/files/raw?path=${encodeURIComponent(filePath)}`;
       previewName = name;
     } else if (name.endsWith('.html')) {
-      // Open HTML files (like plotly plots) in a new tab
       window.open(`/api/files/raw?path=${encodeURIComponent(filePath)}`, '_blank');
     } else if (name.endsWith('.pdf')) {
       window.open(`/api/files/raw?path=${encodeURIComponent(filePath)}`, '_blank');
     } else {
-      // Download other files
-      const a = document.createElement('a');
-      a.href = `/api/files/raw?path=${encodeURIComponent(filePath)}`;
-      a.download = name;
-      a.click();
+      // Navigate to the file's directory
+      const dir = filePath.replace(/\/[^/]+$/, '');
+      loadDir(dir);
     }
+  }
+
+  function openFile(name: string) {
+    openFilePath(currentPath + '/' + name);
   }
 
   function closePreview() {
@@ -80,27 +89,123 @@
     previewName = '';
   }
 
-  function fileIcon(entry: FileEntry): string {
-    if (entry.isDir) return '\uD83D\uDCC1';
-    if (isImage(entry.name)) return '\uD83D\uDDBC';
-    if (entry.name.endsWith('.py')) return '\uD83D\uDC0D';
-    if (entry.name.endsWith('.html')) return '\uD83C\uDF10';
-    if (entry.name.endsWith('.csv') || entry.name.endsWith('.parquet')) return '\uD83D\uDCCA';
+  function fileIcon(name: string, isDir: boolean): string {
+    if (isDir) return '\uD83D\uDCC1';
+    if (isImage(name)) return '\uD83D\uDDBC';
+    if (name.endsWith('.py')) return '\uD83D\uDC0D';
+    if (name.endsWith('.html')) return '\uD83C\uDF10';
+    if (name.endsWith('.csv') || name.endsWith('.parquet')) return '\uD83D\uDCCA';
     return '\uD83D\uDCC4';
+  }
+
+  // Search
+  async function doSearch(q: string) {
+    if (!q.trim()) {
+      searchResults = [];
+      return;
+    }
+    try {
+      const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      searchResults = data.results || [];
+      indexedCount = data.indexed || 0;
+      selectedIndex = 0;
+    } catch {}
+  }
+
+  function onSearchInput() {
+    if (debounceTimer) clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => doSearch(searchQuery), 100);
+  }
+
+  function onSearchKeydown(e: KeyboardEvent) {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      selectedIndex = Math.min(selectedIndex + 1, searchResults.length - 1);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      selectedIndex = Math.max(selectedIndex - 1, 0);
+    } else if (e.key === 'Enter' && searchResults.length > 0) {
+      e.preventDefault();
+      const homeDir = currentPath.split('/').slice(0, 3).join('/') || '/home';
+      openFilePath(homeDir + '/' + searchResults[selectedIndex]);
+      searchQuery = '';
+      searchResults = [];
+      searchActive = false;
+    } else if (e.key === 'Escape') {
+      searchQuery = '';
+      searchResults = [];
+      searchActive = false;
+      searchInputEl?.blur();
+    }
+  }
+
+  function activateSearch() {
+    searchActive = true;
+    setTimeout(() => searchInputEl?.focus(), 0);
+  }
+
+  function handleGlobalKeydown(e: KeyboardEvent) {
+    // Cmd+P or Ctrl+P to open search
+    if ((e.metaKey || e.ctrlKey) && e.key === 'p') {
+      e.preventDefault();
+      activateSearch();
+    }
   }
 
   onMount(() => {
     loadDir(currentPath);
+    document.addEventListener('keydown', handleGlobalKeydown);
+  });
+
+  onDestroy(() => {
+    document.removeEventListener('keydown', handleGlobalKeydown);
   });
 </script>
 
 <div class="file-browser">
   <div class="toolbar">
     <button class="nav-btn" onclick={goUp}>&larr; Up</button>
+    <div class="search-box" class:active={searchActive}>
+      <input
+        bind:this={searchInputEl}
+        bind:value={searchQuery}
+        class="search-input"
+        type="text"
+        placeholder="Search files... (Cmd+P)"
+        oninput={onSearchInput}
+        onkeydown={onSearchKeydown}
+        onfocus={() => searchActive = true}
+      />
+      {#if indexedCount > 0 && searchActive}
+        <span class="index-count">{indexedCount.toLocaleString()} files</span>
+      {/if}
+    </div>
     <span class="path">{currentPath}</span>
   </div>
 
-  {#if loading}
+  {#if searchActive && searchQuery.trim()}
+    <div class="search-results">
+      {#each searchResults as result, i}
+        <button
+          class="search-result"
+          class:selected={i === selectedIndex}
+          onclick={() => { openFilePath(currentPath.split('/').slice(0, 3).join('/') + '/' + result); searchQuery = ''; searchResults = []; searchActive = false; }}
+          onmouseenter={() => selectedIndex = i}
+        >
+          <span class="icon">{fileIcon(result.split('/').pop() || '', false)}</span>
+          <span class="result-path">
+            <span class="result-filename">{result.split('/').pop()}</span>
+            <span class="result-dir">{result.split('/').slice(0, -1).join('/')}</span>
+          </span>
+        </button>
+      {/each}
+      {#if searchResults.length === 0}
+        <div class="empty">No matches</div>
+      {/if}
+    </div>
+  {:else if loading}
     <div class="loading">Loading...</div>
   {:else}
     <div class="file-list">
@@ -111,7 +216,7 @@
           class:plot={!entry.isDir && isPlot(entry.name)}
           onclick={() => entry.isDir ? navigate(entry.name) : openFile(entry.name)}
         >
-          <span class="icon">{fileIcon(entry)}</span>
+          <span class="icon">{fileIcon(entry.name, entry.isDir)}</span>
           <span class="name">{entry.name}</span>
           {#if !entry.isDir}
             <span class="size">{formatSize(entry.size)}</span>
@@ -169,8 +274,85 @@
   .nav-btn:hover {
     border-color: var(--accent);
   }
+  .search-box {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    position: relative;
+    min-width: 0;
+  }
+  .search-input {
+    width: 100%;
+    padding: 5px 10px;
+    font-size: 13px;
+    font-family: inherit;
+    background: var(--bg);
+    color: var(--fg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    outline: none;
+  }
+  .search-input:focus {
+    border-color: var(--accent);
+  }
+  .search-input::placeholder {
+    color: var(--fg-dim);
+  }
+  .index-count {
+    position: absolute;
+    right: 8px;
+    font-size: 10px;
+    color: var(--fg-dim);
+    pointer-events: none;
+  }
   .path {
     font-size: 12px;
+    color: var(--fg-dim);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex-shrink: 0;
+    max-width: 30%;
+  }
+  .search-results {
+    flex: 1;
+    overflow-y: auto;
+    padding: 4px 0;
+  }
+  .search-result {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 6px 12px;
+    background: transparent;
+    border: none;
+    color: var(--fg);
+    font-size: 13px;
+    font-family: inherit;
+    text-align: left;
+  }
+  .search-result:hover,
+  .search-result.selected {
+    background: var(--bg-secondary);
+  }
+  .search-result.selected {
+    border-left: 2px solid var(--accent);
+  }
+  .result-path {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    flex: 1;
+  }
+  .result-filename {
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .result-dir {
+    font-size: 11px;
     color: var(--fg-dim);
     overflow: hidden;
     text-overflow: ellipsis;

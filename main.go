@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 )
 
 func main() {
@@ -35,7 +37,17 @@ func main() {
 		logger.Info("default session created", "target", cfg.TmuxTarget)
 	}
 
-	mux := NewServer(cfg, sm, logger)
+	// File indexer — scans home directory in background
+	homeDir, _ := os.UserHomeDir()
+	if homeDir == "" {
+		homeDir = "/"
+	}
+	indexer := NewFileIndexer(homeDir, 30*time.Second, logger)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go indexer.Run(ctx)
+
+	mux := NewServer(cfg, sm, indexer, logger)
 
 	server := &http.Server{
 		Addr:    cfg.ListenAddr,
@@ -49,6 +61,7 @@ func main() {
 	go func() {
 		<-sigCh
 		logger.Info("shutting down")
+		cancel()
 		sm.CloseAll()
 		server.Close()
 	}()
