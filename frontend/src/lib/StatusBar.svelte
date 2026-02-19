@@ -72,13 +72,16 @@
   }
 
   function handleKeydown(e: KeyboardEvent) {
-    // Alt+[ = previous tab, Alt+] = next tab
-    if (e.altKey && e.key === '[') {
-      e.preventDefault();
-      cycleTab(-1);
-    } else if (e.altKey && e.key === ']') {
-      e.preventDefault();
-      cycleTab(1);
+    if (e.ctrlKey && e.shiftKey) {
+      if (e.key === '<' || e.key === ',') {
+        e.preventDefault();
+        e.stopPropagation();
+        cycleTab(-1);
+      } else if (e.key === '>' || e.key === '.') {
+        e.preventDefault();
+        e.stopPropagation();
+        cycleTab(1);
+      }
     }
   }
 
@@ -113,7 +116,7 @@
     {/if}
   </span>
   {#if !isMobile}
-    <span class="hint">Alt+[ / Alt+]</span>
+    <span class="hint">Ctrl+Shift+&lt; / &gt;</span>
   {/if}
 </div>
 
