@@ -42,7 +42,7 @@ func main() {
 	if homeDir == "" {
 		homeDir = "/"
 	}
-	indexer := NewFileIndexer(homeDir, 30*time.Second, logger)
+	indexer := NewFileIndexer([]string{homeDir, "/tmp"}, 30*time.Second, logger)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go indexer.Run(ctx)

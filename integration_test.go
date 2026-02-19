@@ -78,7 +78,7 @@ func startServer(t *testing.T, cfg *Config) (*Hub, *PTYManager, *RingBuffer, *ht
 	// Pre-create the session for the test target
 	sess := sm.Get(cfg.TmuxTarget)
 
-	indexer := NewFileIndexer("/tmp", 999*time.Hour, logger)
+	indexer := NewFileIndexer([]string{"/tmp"}, 999*time.Hour, logger)
 	mux := NewServer(cfg, sm, indexer, logger)
 	server := &http.Server{Addr: cfg.ListenAddr, Handler: mux}
 

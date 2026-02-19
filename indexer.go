@@ -14,17 +14,17 @@ import (
 // FileIndexer maintains a pre-built index of all filenames under a root
 // directory, skipping dot files/folders. Rescans periodically in the background.
 type FileIndexer struct {
-	root     string
+	roots    []string
 	logger   *slog.Logger
 	interval time.Duration
 
 	mu    sync.RWMutex
-	paths []string // all indexed paths relative to root
+	paths []string // all indexed paths (with root prefix for disambiguation)
 }
 
-func NewFileIndexer(root string, interval time.Duration, logger *slog.Logger) *FileIndexer {
+func NewFileIndexer(roots []string, interval time.Duration, logger *slog.Logger) *FileIndexer {
 	return &FileIndexer{
-		root:     root,
+		roots:    roots,
 		logger:   logger,
 		interval: interval,
 	}
@@ -49,44 +49,44 @@ func (fi *FileIndexer) scan() {
 	start := time.Now()
 	var paths []string
 
-	filepath.WalkDir(fi.root, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return nil // skip errors
-		}
+	for _, root := range fi.roots {
+		filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+			if err != nil {
+				return nil
+			}
 
-		name := d.Name()
+			name := d.Name()
 
-		// Skip dot files and dot directories
-		if strings.HasPrefix(name, ".") {
+			if strings.HasPrefix(name, ".") {
+				if d.IsDir() {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+
 			if d.IsDir() {
-				return filepath.SkipDir
+				switch name {
+				case "node_modules", "__pycache__", "venv", ".venv", "dist", "build", "target":
+					return filepath.SkipDir
+				}
+				return nil
 			}
-			return nil
-		}
 
-		// Skip common large/uninteresting directories
-		if d.IsDir() {
-			switch name {
-			case "node_modules", "__pycache__", "venv", ".venv", "dist", "build", "target":
-				return filepath.SkipDir
+			// Store path relative to root
+			rel, err := filepath.Rel(root, path)
+			if err != nil {
+				return nil
 			}
+			paths = append(paths, rel)
 			return nil
-		}
-
-		// Store path relative to root
-		rel, err := filepath.Rel(fi.root, path)
-		if err != nil {
-			return nil
-		}
-		paths = append(paths, rel)
-		return nil
-	})
+		})
+	}
 
 	fi.mu.Lock()
 	fi.paths = paths
 	fi.mu.Unlock()
 
-	fi.logger.Info("file index updated", "files", len(paths), "duration", time.Since(start).Round(time.Millisecond))
+	fi.logger.Info("file index updated", "roots", fi.roots, "files", len(paths), "duration", time.Since(start).Round(time.Millisecond))
 }
 
 // Search returns paths matching the query (case-insensitive substring match
