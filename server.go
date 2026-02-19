@@ -20,6 +20,7 @@ func NewServer(cfg *Config, sm *SessionManager, indexer *FileIndexer, logger *sl
 	// File browser endpoints
 	mux.HandleFunc("GET /api/files", NewFilesHandler(logger))
 	mux.HandleFunc("GET /api/files/raw", NewFileContentHandler(logger))
+	mux.HandleFunc("PUT /api/files/raw", NewFileSaveHandler(logger))
 
 	// File search endpoint
 	mux.HandleFunc("GET /api/search", func(w http.ResponseWriter, r *http.Request) {

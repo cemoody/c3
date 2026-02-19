@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -105,5 +106,43 @@ func NewFileContentHandler(logger *slog.Logger) http.HandlerFunc {
 		}
 
 		http.ServeFile(w, r, absPath)
+	}
+}
+
+func NewFileSaveHandler(logger *slog.Logger) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		reqPath := r.URL.Query().Get("path")
+		if reqPath == "" {
+			http.Error(w, "missing path", http.StatusBadRequest)
+			return
+		}
+
+		absPath, err := filepath.Abs(reqPath)
+		if err != nil {
+			http.Error(w, "invalid path", http.StatusBadRequest)
+			return
+		}
+
+		// Only allow saving to existing files (no creating new files)
+		if _, err := os.Stat(absPath); err != nil {
+			http.Error(w, "file not found", http.StatusNotFound)
+			return
+		}
+
+		body, err := io.ReadAll(io.LimitReader(r.Body, 10*1024*1024)) // 10MB limit
+		if err != nil {
+			http.Error(w, "read error", http.StatusInternalServerError)
+			return
+		}
+
+		if err := os.WriteFile(absPath, body, 0644); err != nil {
+			logger.Error("failed to save file", "path", absPath, "error", err)
+			http.Error(w, "save failed", http.StatusInternalServerError)
+			return
+		}
+
+		logger.Info("file saved", "path", absPath, "bytes", len(body))
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"ok": "true", "path": absPath})
 	}
 }

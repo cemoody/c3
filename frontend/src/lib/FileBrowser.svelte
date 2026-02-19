@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
+  import { marked } from 'marked';
 
   type FileEntry = { name: string; isDir: boolean; size: number };
 
@@ -11,9 +12,17 @@
   let previewFullPath = $state('');
   let previewOverlayEl: HTMLDivElement;
 
+  // Markdown editor state
+  let mdContent = $state('');
+  let mdRendered = $state('');
+  let mdEditing = $state(false);
+  let mdDirty = $state(false);
+  let mdSaving = $state(false);
+  let mdPreviewPath = $state('');
+
   // Auto-focus the preview overlay so it receives keyboard events
   $effect(() => {
-    if (previewUrl && previewOverlayEl) {
+    if ((previewUrl || mdPreviewPath) && previewOverlayEl) {
       previewOverlayEl.focus();
     }
   });
@@ -69,8 +78,16 @@
     return /\.(png|jpg|jpeg|gif|webp|svg|bmp)$/i.test(name);
   }
 
+  function isMarkdown(name: string): boolean {
+    return /\.(md|markdown|mdx)$/i.test(name);
+  }
+
+  function isPreviewable(name: string): boolean {
+    return isImage(name) || isMarkdown(name);
+  }
+
   function isPlot(name: string): boolean {
-    return /\.(png|jpg|jpeg|gif|webp|svg|pdf|html)$/i.test(name);
+    return /\.(png|jpg|jpeg|gif|webp|svg|pdf|html|md)$/i.test(name);
   }
 
   function homePrefix(): string {
@@ -81,12 +98,18 @@
     return homePrefix() + '/' + relPath;
   }
 
-  function openFilePath(filePath: string) {
+  async function openFilePath(filePath: string) {
     const name = filePath.split('/').pop() || filePath;
     if (isImage(name)) {
+      // Close markdown preview if open
+      mdPreviewPath = '';
       previewUrl = `/api/files/raw?path=${encodeURIComponent(filePath)}`;
       previewName = name;
       previewFullPath = filePath;
+    } else if (isMarkdown(name)) {
+      // Close image preview if open
+      previewUrl = null;
+      await openMarkdown(filePath);
     } else if (name.endsWith('.html')) {
       window.open(`/api/files/raw?path=${encodeURIComponent(filePath)}`, '_blank');
     } else if (name.endsWith('.pdf')) {
@@ -97,22 +120,63 @@
     }
   }
 
+  async function openMarkdown(filePath: string) {
+    try {
+      const res = await fetch(`/api/files/raw?path=${encodeURIComponent(filePath)}`);
+      if (!res.ok) return;
+      const text = await res.text();
+      mdContent = text;
+      mdRendered = marked(text) as string;
+      mdPreviewPath = filePath;
+      mdEditing = false;
+      mdDirty = false;
+      previewName = filePath.split('/').pop() || filePath;
+      previewFullPath = filePath;
+    } catch (e) {
+      console.error('Failed to load markdown:', e);
+    }
+  }
+
+  function onMdEdit() {
+    mdRendered = marked(mdContent) as string;
+    mdDirty = true;
+  }
+
+  async function saveMd() {
+    if (!mdPreviewPath || mdSaving) return;
+    mdSaving = true;
+    try {
+      const res = await fetch(`/api/files/raw?path=${encodeURIComponent(mdPreviewPath)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'text/plain' },
+        body: mdContent,
+      });
+      if (res.ok) mdDirty = false;
+    } catch (e) {
+      console.error('Save failed:', e);
+    } finally {
+      mdSaving = false;
+    }
+  }
+
   function openFile(name: string) {
     openFilePath(currentPath + '/' + name);
   }
 
   function closePreview() {
     previewUrl = null;
+    mdPreviewPath = '';
     previewName = '';
     previewFullPath = '';
+    mdEditing = false;
+    mdDirty = false;
     // Return focus to search input if search is active
     if (searchActive) {
       setTimeout(() => searchInputEl?.focus(), 0);
     }
   }
 
-  // Navigate preview to next/prev search result
-  // Shows images inline, skips non-images
+  // Navigate preview to next/prev previewable search result
   function previewNavigate(delta: number) {
     if (searchResults.length === 0) return;
 
@@ -120,13 +184,10 @@
     for (let i = 0; i < searchResults.length; i++) {
       idx = (idx + delta + searchResults.length) % searchResults.length;
       const name = searchResults[idx].split('/').pop() || '';
-      if (isImage(name)) {
+      if (isPreviewable(name)) {
         selectedIndex = idx;
         const fullPath = resolveSearchResult(searchResults[idx]);
-        previewUrl = `/api/files/raw?path=${encodeURIComponent(fullPath)}`;
-        previewName = name;
-        previewFullPath = fullPath;
-        // Scroll the selected result into view
+        openFilePath(fullPath);
         scrollResultIntoView(idx);
         return;
       }
@@ -289,23 +350,49 @@
     </div>
   {/if}
 
-  {#if previewUrl}
+  {#if previewUrl || mdPreviewPath}
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div bind:this={previewOverlayEl} class="preview-overlay" onclick={closePreview} onkeydown={(e) => {
       if (e.key === 'Escape') closePreview();
-      else if (e.key === 'ArrowDown' || e.key === 'ArrowRight') { e.preventDefault(); previewNavigate(1); }
-      else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') { e.preventDefault(); previewNavigate(-1); }
+      else if (!mdEditing && (e.key === 'ArrowDown' || e.key === 'ArrowRight')) { e.preventDefault(); previewNavigate(1); }
+      else if (!mdEditing && (e.key === 'ArrowUp' || e.key === 'ArrowLeft')) { e.preventDefault(); previewNavigate(-1); }
+      else if (!mdEditing && (e.metaKey || e.ctrlKey) && e.key === 's') { e.preventDefault(); saveMd(); }
     }} tabindex="-1">
       <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <div class="preview-content" onclick={(e) => e.stopPropagation()} onkeydown={() => {}}>
+      <div class="preview-content" class:wide={!!mdPreviewPath} onclick={(e) => e.stopPropagation()} onkeydown={(e) => {
+        if (mdEditing && (e.metaKey || e.ctrlKey) && e.key === 's') { e.preventDefault(); saveMd(); }
+      }}>
         <div class="preview-header">
-          <span class="preview-title">{previewName}</span>
+          <span class="preview-title">{previewName}{mdDirty ? ' *' : ''}</span>
+          {#if mdPreviewPath}
+            <button class="header-btn" class:active={mdEditing} onclick={() => mdEditing = !mdEditing}>
+              {mdEditing ? 'Preview' : 'Edit'}
+            </button>
+            {#if mdDirty}
+              <button class="header-btn save-btn" onclick={saveMd} disabled={mdSaving}>
+                {mdSaving ? 'Saving...' : 'Save'}
+              </button>
+            {/if}
+          {/if}
           {#if searchResults.length > 1}
             <span class="preview-nav-hint">{selectedIndex + 1} / {searchResults.length} &mdash; arrow keys to navigate</span>
           {/if}
           <button class="close-btn" onclick={closePreview}>&times;</button>
         </div>
-        <img src={previewUrl} alt={previewName} />
+        {#if previewUrl}
+          <img src={previewUrl} alt={previewName} />
+        {:else if mdPreviewPath}
+          {#if mdEditing}
+            <textarea
+              class="md-editor"
+              bind:value={mdContent}
+              oninput={onMdEdit}
+              spellcheck="false"
+            ></textarea>
+          {:else}
+            <div class="md-preview">{@html mdRendered}</div>
+          {/if}
+        {/if}
       </div>
     </div>
   {/if}
@@ -521,5 +608,89 @@
     max-width: 90vw;
     max-height: calc(90vh - 40px);
     object-fit: contain;
+  }
+  .preview-content.wide {
+    width: 90vw;
+    max-width: 900px;
+    height: 90vh;
+  }
+  .header-btn {
+    padding: 2px 10px;
+    font-size: 11px;
+    font-family: inherit;
+    background: var(--bg);
+    color: var(--fg-dim);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+  }
+  .header-btn:hover, .header-btn.active {
+    color: var(--fg);
+    border-color: var(--accent);
+  }
+  .save-btn {
+    color: var(--success);
+    border-color: var(--success);
+  }
+  .md-preview {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 24px;
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--fg);
+  }
+  .md-preview :global(h1) { font-size: 1.6em; margin: 0.8em 0 0.4em; }
+  .md-preview :global(h2) { font-size: 1.3em; margin: 0.8em 0 0.4em; }
+  .md-preview :global(h3) { font-size: 1.1em; margin: 0.6em 0 0.3em; }
+  .md-preview :global(p) { margin: 0.5em 0; }
+  .md-preview :global(code) {
+    background: var(--bg-secondary);
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-size: 0.9em;
+  }
+  .md-preview :global(pre) {
+    background: var(--bg-secondary);
+    padding: 12px;
+    border-radius: 6px;
+    overflow-x: auto;
+  }
+  .md-preview :global(pre code) {
+    background: none;
+    padding: 0;
+  }
+  .md-preview :global(ul), .md-preview :global(ol) {
+    padding-left: 1.5em;
+  }
+  .md-preview :global(blockquote) {
+    border-left: 3px solid var(--border);
+    margin: 0.5em 0;
+    padding: 0.5em 1em;
+    color: var(--fg-dim);
+  }
+  .md-preview :global(a) {
+    color: var(--accent);
+  }
+  .md-preview :global(table) {
+    border-collapse: collapse;
+    width: 100%;
+  }
+  .md-preview :global(th), .md-preview :global(td) {
+    border: 1px solid var(--border);
+    padding: 6px 10px;
+    text-align: left;
+  }
+  .md-editor {
+    flex: 1;
+    width: 100%;
+    padding: 16px 24px;
+    font-size: 14px;
+    font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+    line-height: 1.5;
+    background: var(--bg);
+    color: var(--fg);
+    border: none;
+    outline: none;
+    resize: none;
   }
 </style>
