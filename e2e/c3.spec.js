@@ -1,5 +1,8 @@
 const { execSync, spawn } = require('child_process');
+const crypto = require('crypto');
+const fs = require('fs');
 const http = require('http');
+const path = require('path');
 const WebSocket = require('ws');
 const assert = require('assert');
 
@@ -296,6 +299,175 @@ async function main() {
       assert.strictEqual(jsRes.status, 200);
       assert.ok(jsRes.headers['content-type'].includes('javascript'), 'JS content-type');
     }
+  });
+
+  // ---- Image upload tests (simulates clipboard paste flow) ----
+
+  await test('image paste/upload saves file content-addressed and returns path', async () => {
+    // Simulate what the browser paste handler does: POST multipart to /s/{target}/upload
+    // Create a fake PNG (just bytes with PNG magic header)
+    const pngHeader = Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
+    const fakeImageData = Buffer.concat([pngHeader, crypto.randomBytes(256)]);
+    const expectedHash = crypto.createHash('sha256').update(fakeImageData).digest('hex');
+
+    // Build multipart form body
+    const boundary = '----e2eTestBoundary' + Date.now();
+    const body = Buffer.concat([
+      Buffer.from(`--${boundary}\r\n`),
+      Buffer.from(`Content-Disposition: form-data; name="image"; filename="paste.png"\r\n`),
+      Buffer.from(`Content-Type: image/png\r\n\r\n`),
+      fakeImageData,
+      Buffer.from(`\r\n--${boundary}--\r\n`),
+    ]);
+
+    const result = await new Promise((resolve, reject) => {
+      const req = http.request(`${BASE}/s/e2e-test-1:0.0/upload`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': `multipart/form-data; boundary=${boundary}`,
+          'Content-Length': body.length,
+        },
+      }, (res) => {
+        let data = '';
+        res.on('data', chunk => data += chunk);
+        res.on('end', () => resolve({ status: res.statusCode, body: data }));
+      });
+      req.on('error', reject);
+      req.write(body);
+      req.end();
+    });
+
+    assert.strictEqual(result.status, 200, `upload should return 200, got ${result.status}`);
+
+    const json = JSON.parse(result.body);
+    assert.ok(json.path, 'response should include file path');
+    assert.strictEqual(json.hash, expectedHash, 'hash should match SHA-256 of uploaded data');
+    console.log(`    saved to: ${json.path}`);
+
+    // Verify file exists on disk
+    assert.ok(fs.existsSync(json.path), `file should exist at ${json.path}`);
+
+    // Verify file contents match
+    const ondisk = fs.readFileSync(json.path);
+    assert.ok(ondisk.equals(fakeImageData), 'file on disk should match uploaded data');
+  });
+
+  await test('duplicate image upload deduplicates (same hash, same file)', async () => {
+    const imageData = Buffer.from('dedupe-test-image-data-12345');
+    const expectedHash = crypto.createHash('sha256').update(imageData).digest('hex');
+
+    async function uploadImage() {
+      const boundary = '----e2eDedupe' + Date.now();
+      const body = Buffer.concat([
+        Buffer.from(`--${boundary}\r\n`),
+        Buffer.from(`Content-Disposition: form-data; name="image"; filename="test.png"\r\n`),
+        Buffer.from(`Content-Type: image/png\r\n\r\n`),
+        imageData,
+        Buffer.from(`\r\n--${boundary}--\r\n`),
+      ]);
+      return new Promise((resolve, reject) => {
+        const req = http.request(`${BASE}/s/e2e-test-1:0.0/upload`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': `multipart/form-data; boundary=${boundary}`,
+            'Content-Length': body.length,
+          },
+        }, (res) => {
+          let data = '';
+          res.on('data', chunk => data += chunk);
+          res.on('end', () => resolve(JSON.parse(data)));
+        });
+        req.on('error', reject);
+        req.write(body);
+        req.end();
+      });
+    }
+
+    const result1 = await uploadImage();
+    const result2 = await uploadImage();
+
+    assert.strictEqual(result1.hash, expectedHash);
+    assert.strictEqual(result2.hash, expectedHash);
+    assert.strictEqual(result1.path, result2.path, 'same image should resolve to same path');
+
+    // Verify only one file on disk
+    const dir = path.dirname(result1.path);
+    const matching = fs.readdirSync(dir).filter(f => f.startsWith(expectedHash));
+    assert.strictEqual(matching.length, 1, `should have exactly 1 file for hash, got ${matching.length}`);
+  });
+
+  await test('image upload rejects non-image file types', async () => {
+    const boundary = '----e2eReject' + Date.now();
+    const body = Buffer.concat([
+      Buffer.from(`--${boundary}\r\n`),
+      Buffer.from(`Content-Disposition: form-data; name="image"; filename="evil.txt"\r\n`),
+      Buffer.from(`Content-Type: text/plain\r\n\r\n`),
+      Buffer.from('not an image'),
+      Buffer.from(`\r\n--${boundary}--\r\n`),
+    ]);
+
+    const result = await new Promise((resolve, reject) => {
+      const req = http.request(`${BASE}/s/e2e-test-1:0.0/upload`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': `multipart/form-data; boundary=${boundary}`,
+          'Content-Length': body.length,
+        },
+      }, (res) => {
+        let data = '';
+        res.on('data', chunk => data += chunk);
+        res.on('end', () => resolve({ status: res.statusCode, body: data }));
+      });
+      req.on('error', reject);
+      req.write(body);
+      req.end();
+    });
+
+    assert.strictEqual(result.status, 400, `should reject .txt upload with 400, got ${result.status}`);
+  });
+
+  await test('image upload injects prompt into tmux pane', async () => {
+    // First, connect WS so pipe-pane is running and we capture output
+    const ws = await connectWS('e2e-test-1:0.0');
+    await sleep(3000); // let pipe-pane start
+
+    const imageData = Buffer.from('prompt-injection-test-' + Date.now());
+    const boundary = '----e2ePrompt' + Date.now();
+    const body = Buffer.concat([
+      Buffer.from(`--${boundary}\r\n`),
+      Buffer.from(`Content-Disposition: form-data; name="image"; filename="screenshot.png"\r\n`),
+      Buffer.from(`Content-Type: image/png\r\n\r\n`),
+      imageData,
+      Buffer.from(`\r\n--${boundary}--\r\n`),
+    ]);
+
+    await new Promise((resolve, reject) => {
+      const req = http.request(`${BASE}/s/e2e-test-1:0.0/upload`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': `multipart/form-data; boundary=${boundary}`,
+          'Content-Length': body.length,
+        },
+      }, (res) => {
+        let data = '';
+        res.on('data', chunk => data += chunk);
+        res.on('end', () => resolve(JSON.parse(data)));
+      });
+      req.on('error', reject);
+      req.write(body);
+      req.end();
+    });
+
+    await sleep(2000);
+
+    // Check that "Analyze this image:" was injected into the pane
+    const paneContent = tmuxCapture('e2e-test-1:0.0');
+    assert.ok(
+      paneContent.includes('Analyze this image:'),
+      'pane should contain the injected image prompt'
+    );
+
+    ws.close();
   });
 
   // ---- Summary ----
