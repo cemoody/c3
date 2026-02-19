@@ -121,6 +121,29 @@
     }
   }
 
+  // When pane goes missing, refresh sessions and navigate to next tab
+  let lastPaneState = paneState;
+  $effect(() => {
+    if (paneState === 'missing' && lastPaneState !== 'missing' && pageMode === 'session') {
+      // Pane was just destroyed — refresh and navigate away
+      setTimeout(async () => {
+        await fetchSessions();
+        // If this target no longer exists, go to next tab or home
+        const stillExists = allTargets.some(t => t.target === target);
+        if (!stillExists) {
+          const pages = allPages();
+          if (pages.length > 1) {
+            // Navigate to the next available page (skip the dead one)
+            window.location.href = pages[0];
+          } else {
+            window.location.href = '/';
+          }
+        }
+      }, 1000); // Brief delay for tmux to fully clean up
+    }
+    lastPaneState = paneState;
+  });
+
   onMount(() => {
     fetchSessions();
     const interval = setInterval(fetchSessions, 10000);
