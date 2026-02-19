@@ -93,8 +93,11 @@
       } else {
         showJumpToLive = false;
       }
-      // Keep terminal focused when document is active
-      if (pageMode === 'session' && !document.hidden && terminalRef) {
+      // Keep terminal focused when document is active, but don't steal
+      // focus from inputs (e.g., tab rename, search bar)
+      const active = document.activeElement;
+      const isInput = active?.tagName === 'INPUT' || active?.tagName === 'TEXTAREA';
+      if (pageMode === 'session' && !document.hidden && terminalRef && !isInput) {
         terminalRef.focusTerminal();
       }
     }, 500);
