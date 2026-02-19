@@ -66,23 +66,36 @@
     window.location.href = `/s/${encodeURIComponent(t)}/`;
   }
 
-  function cycleTab(delta: number) {
-    if (allTargets.length === 0) return;
+  // All navigable pages: Files + session targets
+  function allPages(): string[] {
+    return ['/files/', ...allTargets.map(t => `/s/${encodeURIComponent(t.target)}/`)];
+  }
+
+  function currentPageIndex(): number {
+    if (pageMode === 'files') return 0;
     const idx = allTargets.findIndex(t => t.target === target);
-    const next = (idx + delta + allTargets.length) % allTargets.length;
-    navigateTo(allTargets[next].target);
+    return idx >= 0 ? idx + 1 : 0;
+  }
+
+  function cyclePage(delta: number) {
+    const pages = allPages();
+    if (pages.length === 0) return;
+    const idx = currentPageIndex();
+    const next = (idx + delta + pages.length) % pages.length;
+    window.location.href = pages[next];
   }
 
   function handleKeydown(e: KeyboardEvent) {
-    if (e.ctrlKey && e.shiftKey) {
-      if (e.key === '<' || e.key === ',') {
+    // Cmd+[ / Cmd+] on Mac (metaKey), Ctrl+[ / Ctrl+] elsewhere
+    if (e.metaKey || e.ctrlKey) {
+      if (e.key === '[') {
         e.preventDefault();
         e.stopPropagation();
-        cycleTab(-1);
-      } else if (e.key === '>' || e.key === '.') {
+        cyclePage(-1);
+      } else if (e.key === ']') {
         e.preventDefault();
         e.stopPropagation();
-        cycleTab(1);
+        cyclePage(1);
       }
     }
   }
@@ -125,7 +138,7 @@
     {/if}
   </span>
   {#if !isMobile}
-    <span class="hint">Ctrl+Shift+&lt; / &gt;</span>
+    <span class="hint">&#8984;[ / &#8984;]</span>
   {/if}
 </div>
 
