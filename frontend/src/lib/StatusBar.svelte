@@ -59,6 +59,7 @@
         }
       }
       allTargets = targets;
+      updatePrefetch();
     } catch {}
   }
 
@@ -75,6 +76,26 @@
     if (pageMode === 'files') return 0;
     const idx = allTargets.findIndex(t => t.target === target);
     return idx >= 0 ? idx + 1 : 0;
+  }
+
+  // Prefetch adjacent pages for instant tab switching
+  function updatePrefetch() {
+    // Remove old prefetch links
+    document.querySelectorAll('link[data-c3-prefetch]').forEach(el => el.remove());
+
+    const pages = allPages();
+    if (pages.length <= 1) return;
+    const idx = currentPageIndex();
+    const prev = (idx - 1 + pages.length) % pages.length;
+    const next = (idx + 1) % pages.length;
+
+    for (const url of [pages[prev], pages[next]]) {
+      const link = document.createElement('link');
+      link.rel = 'prefetch';
+      link.href = url;
+      link.setAttribute('data-c3-prefetch', '');
+      document.head.appendChild(link);
+    }
   }
 
   function cyclePage(delta: number) {
