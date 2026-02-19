@@ -1,0 +1,25 @@
+[Unit]
+Description=Cloud Code Web UI
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/c3 --tmux-target=claude:0.0 --listen-addr=:8080
+Environment=UPLOAD_DIR=/home/chris/uploads
+Restart=on-failure
+RestartSec=5
+User=chris
+WorkingDirectory=/home/chris
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/home/chris/uploads
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=c3
+
+[Install]
+WantedBy=multi-user.target

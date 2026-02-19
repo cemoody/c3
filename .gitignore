@@ -1,0 +1,20 @@
+# Binary
+c3
+
+# Frontend build artifacts
+frontend/node_modules/
+frontend/dist/
+
+# E2E test artifacts
+e2e/node_modules/
+e2e/package.json
+e2e/package-lock.json
+
+# OS
+.DS_Store
+
+# Uploads
+uploads/
+
+# Temp files
+/tmp/
