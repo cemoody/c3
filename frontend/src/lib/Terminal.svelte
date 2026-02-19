@@ -27,6 +27,10 @@
     terminal?.scrollToBottom();
   }
 
+  export function focusTerminal() {
+    terminal?.focus();
+  }
+
   export function isAtBottom(): boolean {
     if (!terminal) return true;
     const buf = terminal.buffer.active;
@@ -96,6 +100,20 @@
       terminal.onData((data: string) => onData(data));
     }
 
+    // Auto-focus so keystrokes work immediately without clicking
+    terminal.focus();
+
+    // Re-focus when the browser tab becomes visible (e.g., after Cmd+] navigation)
+    function onVisibility() {
+      if (!document.hidden && !isMobile) terminal.focus();
+    }
+    document.addEventListener('visibilitychange', onVisibility);
+
+    // Also focus on any click within the terminal container
+    containerEl.addEventListener('mouseenter', () => {
+      if (!isMobile) terminal.focus();
+    });
+
     // Re-fit font on window resize
     const observer = new ResizeObserver(() => {
       if (paneCols > 0 && paneRows > 0) {
@@ -104,7 +122,10 @@
     });
     observer.observe(containerEl);
 
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
   });
 
   onDestroy(() => {
