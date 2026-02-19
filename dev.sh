@@ -27,10 +27,12 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 build() {
+    # Build to a temp binary so the running c3 is untouched until success
     echo "[dev] building frontend..."
     (cd "$SCRIPT_DIR/frontend" && npm run build --silent 2>&1) || { echo "[dev] frontend build FAILED"; return 1; }
     echo "[dev] building backend..."
-    (cd "$SCRIPT_DIR" && go build -o c3 . 2>&1) || { echo "[dev] go build FAILED"; return 1; }
+    (cd "$SCRIPT_DIR" && go build -o c3.new . 2>&1) || { echo "[dev] go build FAILED"; rm -f c3.new; return 1; }
+    mv -f "$SCRIPT_DIR/c3.new" "$SCRIPT_DIR/c3"
     echo "[dev] build OK"
     return 0
 }
@@ -52,11 +54,12 @@ stop_c3() {
 }
 
 restart() {
-    stop_c3
+    # Build first while old c3 keeps running, then swap
     if build; then
+        stop_c3
         start_c3
     else
-        echo "[dev] build failed — c3 not restarted, waiting for next change..."
+        echo "[dev] build failed — keeping current c3 running, waiting for next change..."
     fi
 }
 
