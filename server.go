@@ -21,6 +21,24 @@ func NewServer(cfg *Config, sm *SessionManager, logger *slog.Logger) *http.Serve
 	mux.HandleFunc("GET /api/files", NewFilesHandler(logger))
 	mux.HandleFunc("GET /api/files/raw", NewFileContentHandler(logger))
 
+	// Rename tmux window
+	mux.HandleFunc("POST /api/rename", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Target string `json:"target"`
+			Name   string `json:"name"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Target == "" || body.Name == "" {
+			http.Error(w, "missing target or name", http.StatusBadRequest)
+			return
+		}
+		if err := RenameWindow(body.Target, body.Name); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"ok": "true"})
+	})
+
 	// Session list endpoint
 	mux.HandleFunc("GET /api/sessions", func(w http.ResponseWriter, r *http.Request) {
 		sessions, err := ListSessions()

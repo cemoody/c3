@@ -27,6 +27,15 @@ func ResolvePaneTTY(target string) (string, error) {
 	return tty, nil
 }
 
+// RenameWindow renames the tmux window containing the given pane target.
+func RenameWindow(target, name string) error {
+	cmd := exec.Command("tmux", "rename-window", "-t", target, name)
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("tmux rename-window failed: %w", err)
+	}
+	return nil
+}
+
 // PaneDimensions returns the current cols and rows of a tmux pane.
 func PaneDimensions(target string) (cols, rows int, err error) {
 	cmd := exec.Command("tmux", "display-message", "-p", "-t", target, "#{pane_width} #{pane_height}")

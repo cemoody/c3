@@ -39,6 +39,46 @@
     error: 'Error',
   };
 
+  let editingTarget = $state<string | null>(null);
+  let editValue = $state('');
+
+  async function startRename(t: {target: string; label: string}, e: MouseEvent) {
+    // Only allow renaming the active tab
+    if (t.target !== target || pageMode !== 'session') return;
+    e.preventDefault();
+    editingTarget = t.target;
+    editValue = t.label;
+    // Focus the input after Svelte updates the DOM
+    await new Promise(r => setTimeout(r, 0));
+    const input = document.querySelector('.tab-rename-input') as HTMLInputElement;
+    input?.select();
+  }
+
+  async function commitRename() {
+    if (!editingTarget || !editValue.trim()) {
+      editingTarget = null;
+      return;
+    }
+    try {
+      await fetch('/api/rename', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target: editingTarget, name: editValue.trim() }),
+      });
+      await fetchSessions();
+    } catch {}
+    editingTarget = null;
+  }
+
+  function handleRenameKeydown(e: KeyboardEvent) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      commitRename();
+    } else if (e.key === 'Escape') {
+      editingTarget = null;
+    }
+  }
+
   async function fetchSessions() {
     try {
       const res = await fetch('/api/sessions');
@@ -171,7 +211,23 @@
         href="/s/{encodeURIComponent(t.target)}/"
         title="{t.target} — {t.command}"
       >
-        <span class="tab-label">{t.label}</span>
+        {#if editingTarget === t.target}
+          <!-- svelte-ignore a11y_autofocus -->
+          <input
+            class="tab-rename-input"
+            type="text"
+            bind:value={editValue}
+            onkeydown={handleRenameKeydown}
+            onblur={commitRename}
+            autofocus
+            onclick={(e) => e.preventDefault()}
+          />
+        {:else}
+          <span
+            class="tab-label"
+            ondblclick={(e) => startRename(t, e)}
+          >{t.label}</span>
+        {/if}
       </a>
     {/each}
   </div>
@@ -236,6 +292,17 @@
   .tab-label {
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+  .tab-rename-input {
+    width: 80px;
+    padding: 1px 4px;
+    font-size: 11px;
+    font-family: inherit;
+    background: var(--bg);
+    color: var(--fg);
+    border: 1px solid var(--accent);
+    border-radius: 2px;
+    outline: none;
   }
   .files-tab {
     border-right: 1px solid var(--border);
