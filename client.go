@@ -170,32 +170,64 @@ func (c *Client) replay(ctx context.Context, hello *HelloMsg) error {
 	// For full replay: send the entire ring buffer. This takes longer but
 	// gives complete scrollback history.
 	if hello.ReplayMode != "full" {
-		// Send a tmux capture-pane snapshot of the current screen. Since
-		// xterm.js is set to the same dimensions as the pane (via the status
-		// message), the padded lines render at the correct width — no slurring.
 		target := c.pty.Target()
 		if target != "" {
-			if snapshot, err := CapturePane(target, 2000); err == nil && len(snapshot) > 0 {
-				// capture-pane uses \n between lines, but xterm.js with
-				// convertEol:false needs \r\n. Replace before sending.
-				fixed := bytes.ReplaceAll(snapshot, []byte("\n"), []byte("\r\n"))
-				var buf []byte
-				buf = append(buf, "\x1b[H"...) // cursor home
-				buf = append(buf, fixed...)
-
-				// Restore cursor to where it actually is in the pane.
-				// Without this, incremental TUI updates (typed chars, spinners)
-				// render at the wrong position.
-				if col, row, err := CursorPosition(target); err == nil {
-					// ANSI cursor position is 1-indexed
-					buf = append(buf, []byte(fmt.Sprintf("\x1b[%d;%dH", row+1, col+1))...)
-				}
-
-				if err := c.sendOutputFrame(ctx, buf); err != nil {
-					return fmt.Errorf("snapshot write error: %w", err)
-				}
-				c.logger.Info("snapshot sent", "bytes", len(buf), "duration", time.Since(start))
+			// Get pane dimensions to separate scrollback from visible area
+			_, paneRows, _ := PaneDimensions(target)
+			if paneRows <= 0 {
+				paneRows = 66
 			}
+
+			// Capture visible area + scrollback in one call
+			fullSnapshot, err := CapturePane(target, 2000)
+			if err != nil || len(fullSnapshot) == 0 {
+				return nil
+			}
+
+			lines := bytes.Split(fullSnapshot, []byte("\n"))
+			// Remove trailing empty line from split if present
+			if len(lines) > 0 && len(lines[len(lines)-1]) == 0 {
+				lines = lines[:len(lines)-1]
+			}
+
+			var scrollbackLines, visibleLines [][]byte
+			if len(lines) > paneRows {
+				scrollbackLines = lines[:len(lines)-paneRows]
+				visibleLines = lines[len(lines)-paneRows:]
+			} else {
+				visibleLines = lines
+			}
+
+			var buf []byte
+
+			// 1. Send scrollback lines (they'll scroll into xterm.js scrollback)
+			for _, line := range scrollbackLines {
+				buf = append(buf, line...)
+				buf = append(buf, '\r', '\n')
+			}
+
+			// 2. Clear screen + cursor home, then write visible area
+			buf = append(buf, "\x1b[2J\x1b[H"...)
+			for i, line := range visibleLines {
+				buf = append(buf, line...)
+				if i < len(visibleLines)-1 {
+					buf = append(buf, '\r', '\n')
+				}
+			}
+
+			// 3. Restore cursor position
+			if col, row, err := CursorPosition(target); err == nil {
+				buf = append(buf, []byte(fmt.Sprintf("\x1b[%d;%dH", row+1, col+1))...)
+			}
+
+			if err := c.sendOutputFrame(ctx, buf); err != nil {
+				return fmt.Errorf("snapshot write error: %w", err)
+			}
+			c.logger.Info("snapshot sent",
+				"bytes", len(buf),
+				"scrollback_lines", len(scrollbackLines),
+				"visible_lines", len(visibleLines),
+				"duration", time.Since(start))
 		}
 		return nil
 	}
