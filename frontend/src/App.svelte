@@ -120,7 +120,7 @@
   <SessionPicker onSelect={handleSessionSelect} />
 {:else}
   <div class="app">
-    <StatusBar {connectionState} {paneState} onBack={handleBackToSessions} {target} />
+    <StatusBar {connectionState} {paneState} {target} />
     <div class="terminal-wrapper">
       <TerminalView
         bind:this={terminalRef}

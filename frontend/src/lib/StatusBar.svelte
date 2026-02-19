@@ -1,17 +1,23 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import type { ConnectionState, PaneState } from './websocket';
+
+  type Pane = { index: string; currentCommand: string; target: string };
+  type Window = { index: string; name: string; panes: Pane[] };
+  type Session = { name: string; windows: Window[] };
 
   let {
     connectionState = 'disconnected',
     paneState = 'unknown',
     target = '',
-    onBack,
   }: {
     connectionState?: ConnectionState;
     paneState?: PaneState;
     target?: string;
-    onBack?: () => void;
   } = $props();
+
+  let sessions = $state<Session[]>([]);
+  let allTargets = $state<{target: string; label: string; command: string}[]>([]);
 
   const stateColors: Record<ConnectionState, string> = {
     live: 'var(--success)',
@@ -21,65 +27,141 @@
     error: 'var(--error)',
   };
 
-  const stateLabels: Record<ConnectionState, string> = {
-    live: 'Live',
-    replaying: 'Replaying...',
-    connecting: 'Connecting...',
-    disconnected: 'Disconnected',
-    error: 'Error',
-  };
+  async function fetchSessions() {
+    try {
+      const res = await fetch('/api/sessions');
+      if (!res.ok) return;
+      const data = await res.json();
+      sessions = data.sessions || [];
+      // Flatten into a list of targets
+      const targets: typeof allTargets = [];
+      for (const sess of sessions) {
+        for (const win of sess.windows) {
+          for (const pane of win.panes) {
+            targets.push({
+              target: pane.target,
+              label: `${sess.name}:${win.name}`,
+              command: pane.currentCommand,
+            });
+          }
+        }
+      }
+      allTargets = targets;
+    } catch {}
+  }
+
+  function navigateTo(t: string) {
+    window.location.href = `/s/${encodeURIComponent(t)}/`;
+  }
+
+  function cycleTab(delta: number) {
+    if (allTargets.length === 0) return;
+    const idx = allTargets.findIndex(t => t.target === target);
+    const next = (idx + delta + allTargets.length) % allTargets.length;
+    navigateTo(allTargets[next].target);
+  }
+
+  function handleKeydown(e: KeyboardEvent) {
+    // Alt+[ = previous tab, Alt+] = next tab
+    if (e.altKey && e.key === '[') {
+      e.preventDefault();
+      cycleTab(-1);
+    } else if (e.altKey && e.key === ']') {
+      e.preventDefault();
+      cycleTab(1);
+    }
+  }
+
+  onMount(() => {
+    fetchSessions();
+    const interval = setInterval(fetchSessions, 10000);
+    document.addEventListener('keydown', handleKeydown);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('keydown', handleKeydown);
+    };
+  });
 </script>
 
-<div class="status-bar">
-  {#if onBack}
-    <button class="back-btn" onclick={onBack}>&larr;</button>
-  {/if}
-  <span class="dot" style:background={stateColors[connectionState]}></span>
-  <span class="label">{stateLabels[connectionState]}</span>
-  {#if target}
-    <span class="target">{target}</span>
-  {/if}
-  {#if paneState === 'missing'}
-    <span class="pane-missing">Pane not found</span>
-  {/if}
+<div class="tab-bar">
+  <div class="tabs">
+    {#each allTargets as t}
+      <button
+        class="tab"
+        class:active={t.target === target}
+        onclick={() => navigateTo(t.target)}
+        title="{t.target} — {t.command}"
+      >
+        <span class="tab-label">{t.label}</span>
+        {#if t.target === target}
+          <span class="dot" style:background={stateColors[connectionState]}></span>
+        {/if}
+      </button>
+    {/each}
+  </div>
+  <span class="hint">Alt+[ / Alt+]</span>
 </div>
 
 <style>
-  .status-bar {
+  .tab-bar {
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 4px 8px;
+    gap: 4px;
+    padding: 3px 6px;
     background: var(--bg-secondary);
     border-bottom: 1px solid var(--border);
-    font-size: 12px;
+    flex-shrink: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .tab-bar::-webkit-scrollbar {
+    display: none;
+  }
+  .tabs {
+    display: flex;
+    gap: 2px;
+    flex: 1;
+    min-width: 0;
+  }
+  .tab {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 10px;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 4px;
     color: var(--fg-dim);
+    font-size: 11px;
+    font-family: inherit;
+    white-space: nowrap;
     flex-shrink: 0;
   }
+  .tab:hover {
+    background: var(--bg);
+    border-color: var(--border);
+  }
+  .tab.active {
+    background: var(--bg);
+    border-color: var(--accent);
+    color: var(--fg);
+    font-weight: 600;
+  }
+  .tab-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
   .dot {
-    width: 8px;
-    height: 8px;
+    width: 6px;
+    height: 6px;
     border-radius: 50%;
     flex-shrink: 0;
   }
-  .back-btn {
-    background: none;
-    border: none;
+  .hint {
     color: var(--fg-dim);
-    font-size: 14px;
-    padding: 2px 6px;
-    cursor: pointer;
-  }
-  .back-btn:hover {
-    color: var(--fg);
-  }
-  .target {
-    color: var(--fg-dim);
-    margin-left: auto;
-    font-family: monospace;
-  }
-  .pane-missing {
-    color: var(--error);
-    margin-left: 8px;
+    font-size: 10px;
+    white-space: nowrap;
+    flex-shrink: 0;
+    opacity: 0.5;
   }
 </style>
