@@ -125,8 +125,10 @@
   {/if}
 
   {#if previewUrl}
-    <div class="preview-overlay" onclick={closePreview}>
-      <div class="preview-content" onclick={(e) => e.stopPropagation()}>
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="preview-overlay" onclick={closePreview} onkeydown={(e) => e.key === 'Escape' && closePreview()}>
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div class="preview-content" onclick={(e) => e.stopPropagation()} onkeydown={() => {}}>
         <div class="preview-header">
           <span>{previewName}</span>
           <button class="close-btn" onclick={closePreview}>&times;</button>

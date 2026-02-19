@@ -162,7 +162,7 @@
   }
 
   // When pane goes missing, refresh sessions and navigate to next tab
-  let lastPaneState = paneState;
+  let lastPaneState = $state(paneState);
   $effect(() => {
     if (paneState === 'missing' && lastPaneState !== 'missing' && pageMode === 'session') {
       // Pane was just destroyed — refresh and navigate away
@@ -225,7 +225,10 @@
         {:else}
           <span
             class="tab-label"
+            role="textbox"
+            tabindex="0"
             ondblclick={(e) => startRename(t, e)}
+            onclick={(e) => { if (t.target === target && pageMode === 'session') { e.preventDefault(); startRename(t, e); } }}
           >{t.label}</span>
         {/if}
       </a>

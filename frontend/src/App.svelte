@@ -26,7 +26,7 @@
 
   let pageMode = $state<PageMode>(getPageMode());
   let target = $state<string | null>(getTargetFromPath());
-  let terminalRef: ReturnType<typeof TerminalView>;
+  let terminalRef = $state<ReturnType<typeof TerminalView>>();
   let wsClient: WebSocketClient | null = null;
   let connectionState = $state<ConnectionState>('disconnected');
   let paneState = $state<PaneState>('unknown');
