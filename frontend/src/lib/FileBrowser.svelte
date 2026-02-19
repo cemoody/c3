@@ -105,9 +105,14 @@
     previewUrl = null;
     previewName = '';
     previewFullPath = '';
+    // Return focus to search input if search is active
+    if (searchActive) {
+      setTimeout(() => searchInputEl?.focus(), 0);
+    }
   }
 
-  // Navigate preview to next/prev search result that is an image
+  // Navigate preview to next/prev search result
+  // Shows images inline, skips non-images
   function previewNavigate(delta: number) {
     if (searchResults.length === 0) return;
 
@@ -121,9 +126,16 @@
         previewUrl = `/api/files/raw?path=${encodeURIComponent(fullPath)}`;
         previewName = name;
         previewFullPath = fullPath;
+        // Scroll the selected result into view
+        scrollResultIntoView(idx);
         return;
       }
     }
+  }
+
+  function scrollResultIntoView(idx: number) {
+    const el = document.querySelector(`.search-result:nth-child(${idx + 1})`);
+    el?.scrollIntoView({ block: 'nearest' });
   }
 
   function fileIcon(name: string, isDir: boolean): string {
@@ -156,6 +168,20 @@
     debounceTimer = setTimeout(() => doSearch(searchQuery), 100);
   }
 
+  function previewSelectedResult() {
+    if (searchResults.length === 0) return;
+    const fullPath = resolveSearchResult(searchResults[selectedIndex]);
+    const name = searchResults[selectedIndex].split('/').pop() || '';
+    if (isImage(name)) {
+      previewUrl = `/api/files/raw?path=${encodeURIComponent(fullPath)}`;
+      previewName = name;
+      previewFullPath = fullPath;
+    } else {
+      // Non-image: open it (HTML in new tab, etc.)
+      openFilePath(fullPath);
+    }
+  }
+
   function onSearchKeydown(e: KeyboardEvent) {
     if (e.key === 'ArrowDown') {
       e.preventDefault();
@@ -163,13 +189,10 @@
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       selectedIndex = Math.max(selectedIndex - 1, 0);
-    } else if (e.key === 'Enter' && searchResults.length > 0) {
+    } else if ((e.key === 'Enter' || e.key === ' ') && searchResults.length > 0) {
+      // Enter or Space: preview the selected result (like Finder QuickLook)
       e.preventDefault();
-      const homeDir = currentPath.split('/').slice(0, 3).join('/') || '/home';
-      openFilePath(homeDir + '/' + searchResults[selectedIndex]);
-      searchQuery = '';
-      searchResults = [];
-      searchActive = false;
+      previewSelectedResult();
     } else if (e.key === 'Escape') {
       searchQuery = '';
       searchResults = [];
@@ -228,7 +251,7 @@
         <button
           class="search-result"
           class:selected={i === selectedIndex}
-          onclick={() => { openFilePath(currentPath.split('/').slice(0, 3).join('/') + '/' + result); searchQuery = ''; searchResults = []; searchActive = false; }}
+          onclick={() => { selectedIndex = i; previewSelectedResult(); }}
           onmouseenter={() => selectedIndex = i}
         >
           <span class="icon">{fileIcon(result.split('/').pop() || '', false)}</span>
