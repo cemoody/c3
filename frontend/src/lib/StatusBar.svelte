@@ -19,12 +19,22 @@
   let sessions = $state<Session[]>([]);
   let allTargets = $state<{target: string; label: string; command: string}[]>([]);
 
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
   const stateColors: Record<ConnectionState, string> = {
     live: 'var(--success)',
     replaying: 'var(--warning)',
     connecting: 'var(--warning)',
     disconnected: 'var(--error)',
     error: 'var(--error)',
+  };
+
+  const stateLabels: Record<ConnectionState, string> = {
+    live: 'Live',
+    replaying: 'Replaying...',
+    connecting: 'Connecting...',
+    disconnected: 'Disconnected',
+    error: 'Error',
   };
 
   async function fetchSessions() {
@@ -93,13 +103,18 @@
         title="{t.target} — {t.command}"
       >
         <span class="tab-label">{t.label}</span>
-        {#if t.target === target}
-          <span class="dot" style:background={stateColors[connectionState]}></span>
-        {/if}
       </button>
     {/each}
   </div>
-  <span class="hint">Alt+[ / Alt+]</span>
+  <span class="status-indicator">
+    <span class="dot" style:background={stateColors[connectionState]}></span>
+    {#if !isMobile}
+      <span class="status-label">{stateLabels[connectionState]}</span>
+    {/if}
+  </span>
+  {#if !isMobile}
+    <span class="hint">Alt+[ / Alt+]</span>
+  {/if}
 </div>
 
 <style>
@@ -151,9 +166,20 @@
     overflow: hidden;
     text-overflow: ellipsis;
   }
+  .status-indicator {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    flex-shrink: 0;
+    padding: 0 4px;
+  }
+  .status-label {
+    font-size: 11px;
+    color: var(--fg-dim);
+  }
   .dot {
-    width: 6px;
-    height: 6px;
+    width: 7px;
+    height: 7px;
     border-radius: 50%;
     flex-shrink: 0;
   }
