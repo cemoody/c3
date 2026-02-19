@@ -113,22 +113,22 @@
 
 <div class="tab-bar">
   <div class="tabs">
-    <button
+    <a
       class="tab files-tab"
       class:active={pageMode === 'files'}
-      onclick={() => window.location.href = '/files/'}
+      href="/files/"
     >
       <span class="tab-label">Files</span>
-    </button>
+    </a>
     {#each allTargets as t}
-      <button
+      <a
         class="tab"
         class:active={t.target === target && pageMode === 'session'}
-        onclick={() => navigateTo(t.target)}
+        href="/s/{encodeURIComponent(t.target)}/"
         title="{t.target} — {t.command}"
       >
         <span class="tab-label">{t.label}</span>
-      </button>
+      </a>
     {/each}
   </div>
   <span class="status-indicator">
@@ -176,6 +176,8 @@
     font-family: inherit;
     white-space: nowrap;
     flex-shrink: 0;
+    text-decoration: none;
+    cursor: pointer;
   }
   .tab:hover {
     background: var(--bg);
