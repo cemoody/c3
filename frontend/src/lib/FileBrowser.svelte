@@ -8,6 +8,15 @@
   let loading = $state(false);
   let previewUrl = $state<string | null>(null);
   let previewName = $state('');
+  let previewFullPath = $state('');
+  let previewOverlayEl: HTMLDivElement;
+
+  // Auto-focus the preview overlay so it receives keyboard events
+  $effect(() => {
+    if (previewUrl && previewOverlayEl) {
+      previewOverlayEl.focus();
+    }
+  });
 
   // Search state
   let searchQuery = $state('');
@@ -64,17 +73,25 @@
     return /\.(png|jpg|jpeg|gif|webp|svg|pdf|html)$/i.test(name);
   }
 
+  function homePrefix(): string {
+    return currentPath.split('/').slice(0, 3).join('/') || '/home';
+  }
+
+  function resolveSearchResult(relPath: string): string {
+    return homePrefix() + '/' + relPath;
+  }
+
   function openFilePath(filePath: string) {
     const name = filePath.split('/').pop() || filePath;
     if (isImage(name)) {
       previewUrl = `/api/files/raw?path=${encodeURIComponent(filePath)}`;
       previewName = name;
+      previewFullPath = filePath;
     } else if (name.endsWith('.html')) {
       window.open(`/api/files/raw?path=${encodeURIComponent(filePath)}`, '_blank');
     } else if (name.endsWith('.pdf')) {
       window.open(`/api/files/raw?path=${encodeURIComponent(filePath)}`, '_blank');
     } else {
-      // Navigate to the file's directory
       const dir = filePath.replace(/\/[^/]+$/, '');
       loadDir(dir);
     }
@@ -87,6 +104,26 @@
   function closePreview() {
     previewUrl = null;
     previewName = '';
+    previewFullPath = '';
+  }
+
+  // Navigate preview to next/prev search result that is an image
+  function previewNavigate(delta: number) {
+    if (searchResults.length === 0) return;
+
+    let idx = selectedIndex;
+    for (let i = 0; i < searchResults.length; i++) {
+      idx = (idx + delta + searchResults.length) % searchResults.length;
+      const name = searchResults[idx].split('/').pop() || '';
+      if (isImage(name)) {
+        selectedIndex = idx;
+        const fullPath = resolveSearchResult(searchResults[idx]);
+        previewUrl = `/api/files/raw?path=${encodeURIComponent(fullPath)}`;
+        previewName = name;
+        previewFullPath = fullPath;
+        return;
+      }
+    }
   }
 
   function fileIcon(name: string, isDir: boolean): string {
@@ -231,11 +268,18 @@
 
   {#if previewUrl}
     <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div class="preview-overlay" onclick={closePreview} onkeydown={(e) => e.key === 'Escape' && closePreview()}>
+    <div bind:this={previewOverlayEl} class="preview-overlay" onclick={closePreview} onkeydown={(e) => {
+      if (e.key === 'Escape') closePreview();
+      else if (e.key === 'ArrowDown' || e.key === 'ArrowRight') { e.preventDefault(); previewNavigate(1); }
+      else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') { e.preventDefault(); previewNavigate(-1); }
+    }} tabindex="-1">
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div class="preview-content" onclick={(e) => e.stopPropagation()} onkeydown={() => {}}>
         <div class="preview-header">
-          <span>{previewName}</span>
+          <span class="preview-title">{previewName}</span>
+          {#if searchResults.length > 1}
+            <span class="preview-nav-hint">{selectedIndex + 1} / {searchResults.length} &mdash; arrow keys to navigate</span>
+          {/if}
           <button class="close-btn" onclick={closePreview}>&times;</button>
         </div>
         <img src={previewUrl} alt={previewName} />
@@ -433,6 +477,15 @@
     padding: 8px 12px;
     background: var(--bg-secondary);
     font-size: 13px;
+  }
+  .preview-title {
+    font-weight: 600;
+  }
+  .preview-nav-hint {
+    font-size: 11px;
+    color: var(--fg-dim);
+    margin-left: auto;
+    margin-right: 8px;
   }
   .close-btn {
     background: none;
