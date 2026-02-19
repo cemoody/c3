@@ -38,14 +38,27 @@ func PaneDimensions(target string) (cols, rows int, err error) {
 	return
 }
 
-// CapturePane returns the current visible content of a tmux pane with ANSI
-// escape sequences intact. This is a point-in-time snapshot (~2-5KB) that can
-// be sent to a client for instant rendering before the full ring buffer replay.
-func CapturePane(target string) ([]byte, error) {
+// CursorPosition returns the cursor position (0-indexed col, row) of a tmux pane.
+func CursorPosition(target string) (col, row int, err error) {
+	cmd := exec.Command("tmux", "display-message", "-p", "-t", target, "#{cursor_x} #{cursor_y}")
+	out, err := cmd.Output()
+	if err != nil {
+		return 0, 0, err
+	}
+	_, err = fmt.Sscanf(strings.TrimSpace(string(out)), "%d %d", &col, &row)
+	return
+}
+
+// CapturePane returns the visible content plus scrollback history of a tmux
+// pane with ANSI escape sequences intact. The scrollbackLines parameter
+// controls how many lines of history before the visible area to include.
+func CapturePane(target string, scrollbackLines int) ([]byte, error) {
 	// -e: include escape sequences (colors, etc.)
 	// -p: output to stdout
 	// -t: target pane
-	cmd := exec.Command("tmux", "capture-pane", "-e", "-p", "-t", target)
+	// -S: start line (negative = lines before visible area)
+	startLine := fmt.Sprintf("-%d", scrollbackLines)
+	cmd := exec.Command("tmux", "capture-pane", "-e", "-p", "-t", target, "-S", startLine)
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("tmux capture-pane failed: %w", err)

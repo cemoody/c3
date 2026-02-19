@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -89,6 +90,18 @@ func (c *Client) readPump(ctx context.Context) {
 	// Send current status.
 	c.sendStatus(ctx)
 
+	// Inject Ctrl-L to force the TUI to do a full redraw. The capture-pane
+	// snapshot shows the right visual content but doesn't set up terminal state
+	// (scroll regions, alternate screen, bracket paste, etc.). The Ctrl-L redraw
+	// comes through pipe-pane → hub → this client, setting up all state correctly.
+	// Since dimensions match, the redraw is visually identical to the snapshot.
+	if hello.ReplayMode != "full" {
+		go func() {
+			time.Sleep(200 * time.Millisecond)
+			c.pty.WriteInput([]byte("\x0c"))
+		}()
+	}
+
 	// Read loop for input/resize messages.
 	// Note: we intentionally do NOT forward resize to the PTY.
 	// The web client adapts to the pane's dimensions (sent in status),
@@ -157,12 +170,33 @@ func (c *Client) replay(ctx context.Context, hello *HelloMsg) error {
 	// For full replay: send the entire ring buffer. This takes longer but
 	// gives complete scrollback history.
 	if hello.ReplayMode != "full" {
-		// For fast connect: skip replay entirely. The client will send a
-		// resize, which triggers the TUI to receive SIGWINCH and redraw.
-		// We also inject Ctrl-L after a short delay to force a full redraw
-		// at the client's terminal dimensions. This avoids width mismatches
-		// between the old pane size and the browser's terminal size.
-		c.logger.Info("fast connect, skipping replay — will redraw on resize")
+		// Send a tmux capture-pane snapshot of the current screen. Since
+		// xterm.js is set to the same dimensions as the pane (via the status
+		// message), the padded lines render at the correct width — no slurring.
+		target := c.pty.Target()
+		if target != "" {
+			if snapshot, err := CapturePane(target, 2000); err == nil && len(snapshot) > 0 {
+				// capture-pane uses \n between lines, but xterm.js with
+				// convertEol:false needs \r\n. Replace before sending.
+				fixed := bytes.ReplaceAll(snapshot, []byte("\n"), []byte("\r\n"))
+				var buf []byte
+				buf = append(buf, "\x1b[H"...) // cursor home
+				buf = append(buf, fixed...)
+
+				// Restore cursor to where it actually is in the pane.
+				// Without this, incremental TUI updates (typed chars, spinners)
+				// render at the wrong position.
+				if col, row, err := CursorPosition(target); err == nil {
+					// ANSI cursor position is 1-indexed
+					buf = append(buf, []byte(fmt.Sprintf("\x1b[%d;%dH", row+1, col+1))...)
+				}
+
+				if err := c.sendOutputFrame(ctx, buf); err != nil {
+					return fmt.Errorf("snapshot write error: %w", err)
+				}
+				c.logger.Info("snapshot sent", "bytes", len(buf), "duration", time.Since(start))
+			}
+		}
 		return nil
 	}
 
