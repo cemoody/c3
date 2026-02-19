@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -82,9 +83,11 @@ func (p *PTYManager) Open(ttyPath string) error {
 	}
 	p.ptyFile = f
 
-	// Create a FIFO for tmux pipe-pane output
+	// Create a FIFO for tmux pipe-pane output — unique per target to avoid
+	// cross-session bleed when multiple sessions are open simultaneously.
 	tmpDir := os.TempDir()
-	fifoPath := filepath.Join(tmpDir, fmt.Sprintf("c3-pipe-%d", os.Getpid()))
+	safeTarget := strings.ReplaceAll(strings.ReplaceAll(p.tmuxTarget, ":", "-"), ".", "-")
+	fifoPath := filepath.Join(tmpDir, fmt.Sprintf("c3-pipe-%d-%s", os.Getpid(), safeTarget))
 	os.Remove(fifoPath) // clean up any stale FIFO
 	if err := unix.Mkfifo(fifoPath, 0600); err != nil {
 		f.Close()
