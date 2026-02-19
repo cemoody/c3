@@ -19,7 +19,7 @@
   } = $props();
 
   let sessions = $state<Session[]>([]);
-  let allTargets = $state<{target: string; label: string; command: string}[]>([]);
+  let allTargets = $state<{target: string; label: string; windowName: string; command: string}[]>([]);
 
   const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
@@ -42,32 +42,44 @@
   let editingTarget = $state<string | null>(null);
   let editValue = $state('');
 
-  async function startRename(t: {target: string; label: string}, e: MouseEvent) {
+  let renameCommitted = false;
+
+  async function startRename(t: {target: string; label: string; windowName: string}, e: MouseEvent) {
     // Only allow renaming the active tab
     if (t.target !== target || pageMode !== 'session') return;
     e.preventDefault();
+    e.stopPropagation();
     editingTarget = t.target;
-    editValue = t.label;
+    editValue = t.windowName;
+    renameCommitted = false;
     // Focus the input after Svelte updates the DOM
-    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 50));
     const input = document.querySelector('.tab-rename-input') as HTMLInputElement;
-    input?.select();
+    if (input) {
+      input.focus();
+      input.select();
+    }
   }
 
   async function commitRename() {
-    if (!editingTarget || !editValue.trim()) {
-      editingTarget = null;
-      return;
-    }
+    // Guard against double-commit from blur + Enter
+    if (renameCommitted || !editingTarget) return;
+    renameCommitted = true;
+
+    const name = editValue.trim();
+    const tgt = editingTarget;
+    editingTarget = null;
+
+    if (!name) return;
+
     try {
       await fetch('/api/rename', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ target: editingTarget, name: editValue.trim() }),
+        body: JSON.stringify({ target: tgt, name }),
       });
       await fetchSessions();
     } catch {}
-    editingTarget = null;
   }
 
   function handleRenameKeydown(e: KeyboardEvent) {
@@ -93,6 +105,7 @@
             targets.push({
               target: pane.target,
               label: `${sess.name}:${win.name}`,
+              windowName: win.name,
               command: pane.currentCommand,
             });
           }
@@ -220,15 +233,14 @@
             onkeydown={handleRenameKeydown}
             onblur={commitRename}
             autofocus
-            onclick={(e) => e.preventDefault()}
+            onclick={(e) => { e.preventDefault(); e.stopPropagation(); }}
           />
         {:else}
           <span
             class="tab-label"
             role="textbox"
             tabindex="0"
-            ondblclick={(e) => startRename(t, e)}
-            onclick={(e) => { if (t.target === target && pageMode === 'session') { e.preventDefault(); startRename(t, e); } }}
+            onclick={(e) => { if (t.target === target && pageMode === 'session') { e.preventDefault(); e.stopPropagation(); startRename(t, e); } }}
           >{t.label}</span>
         {/if}
       </a>
