@@ -47,10 +47,36 @@
     wsClient.connect('tail');
   }
 
+  async function handlePaste(e: ClipboardEvent) {
+    if (!target) return;
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    for (const item of items) {
+      if (item.type.startsWith('image/')) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        if (!file) continue;
+
+        const form = new FormData();
+        form.append('image', file, `paste.${item.type.split('/')[1]}`);
+        try {
+          const res = await fetch(`${basePath}/upload`, { method: 'POST', body: form });
+          if (!res.ok) console.error('Upload failed:', await res.text());
+        } catch (err) {
+          console.error('Paste upload error:', err);
+        }
+        return;
+      }
+    }
+  }
+
   onMount(() => {
     if (target) {
       connectToTarget(target);
     }
+
+    document.addEventListener('paste', handlePaste);
 
     scrollCheckInterval = setInterval(() => {
       if (terminalRef && !terminalRef.isAtBottom()) {
@@ -61,6 +87,7 @@
     }, 500);
 
     return () => {
+      document.removeEventListener('paste', handlePaste);
       wsClient?.disconnect();
       if (scrollCheckInterval) clearInterval(scrollCheckInterval);
     };
