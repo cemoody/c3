@@ -72,12 +72,8 @@ func (fi *FileIndexer) scan() {
 				return nil
 			}
 
-			// Store path relative to root
-			rel, err := filepath.Rel(root, path)
-			if err != nil {
-				return nil
-			}
-			paths = append(paths, rel)
+			// Store absolute path so the frontend can open files from any root
+			paths = append(paths, path)
 			return nil
 		})
 	}

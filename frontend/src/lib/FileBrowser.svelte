@@ -90,12 +90,9 @@
     return /\.(png|jpg|jpeg|gif|webp|svg|pdf|html|md)$/i.test(name);
   }
 
-  function homePrefix(): string {
-    return currentPath.split('/').slice(0, 3).join('/') || '/home';
-  }
-
-  function resolveSearchResult(relPath: string): string {
-    return homePrefix() + '/' + relPath;
+  // Search results are absolute paths from the server
+  function resolveSearchResult(absPath: string): string {
+    return absPath;
   }
 
   async function openFilePath(filePath: string) {
