@@ -17,6 +17,10 @@ var frontendFS embed.FS
 func NewServer(cfg *Config, sm *SessionManager, logger *slog.Logger) *http.ServeMux {
 	mux := http.NewServeMux()
 
+	// File browser endpoints
+	mux.HandleFunc("GET /api/files", NewFilesHandler(logger))
+	mux.HandleFunc("GET /api/files/raw", NewFileContentHandler(logger))
+
 	// Session list endpoint
 	mux.HandleFunc("GET /api/sessions", func(w http.ResponseWriter, r *http.Request) {
 		sessions, err := ListSessions()

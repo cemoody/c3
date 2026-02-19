@@ -6,15 +6,25 @@
   import QuickActions from './lib/QuickActions.svelte';
   import JumpToLive from './lib/JumpToLive.svelte';
   import SessionPicker from './lib/SessionPicker.svelte';
+  import FileBrowser from './lib/FileBrowser.svelte';
   import { WebSocketClient, type ConnectionState, type PaneState } from './lib/websocket';
 
   const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+  type PageMode = 'picker' | 'session' | 'files';
+
+  function getPageMode(): PageMode {
+    if (location.pathname.startsWith('/files')) return 'files';
+    if (location.pathname.startsWith('/s/')) return 'session';
+    return 'picker';
+  }
 
   function getTargetFromPath(): string | null {
     const match = location.pathname.match(/^\/s\/([^/]+)/);
     return match ? decodeURIComponent(match[1]) : null;
   }
 
+  let pageMode = $state<PageMode>(getPageMode());
   let target = $state<string | null>(getTargetFromPath());
   let terminalRef: ReturnType<typeof TerminalView>;
   let wsClient: WebSocketClient | null = null;
@@ -31,7 +41,6 @@
       },
       onStatus: (ps: PaneState, _epoch: number, cols: number, rows: number) => {
         paneState = ps;
-        // Set terminal to match the pane dimensions (don't resize the pane)
         if (cols > 0 && rows > 0) {
           terminalRef?.setDimensions(cols, rows);
         }
@@ -48,7 +57,7 @@
   }
 
   async function handlePaste(e: ClipboardEvent) {
-    if (!target) return;
+    if (!target || pageMode !== 'session') return;
     const items = e.clipboardData?.items;
     if (!items) return;
 
@@ -72,7 +81,7 @@
   }
 
   onMount(() => {
-    if (target) {
+    if (pageMode === 'session' && target) {
       connectToTarget(target);
     }
 
@@ -94,8 +103,7 @@
   });
 
   function handleSessionSelect(selectedTarget: string) {
-    const path = `/s/${encodeURIComponent(selectedTarget)}/`;
-    window.location.href = path;
+    window.location.href = `/s/${encodeURIComponent(selectedTarget)}/`;
   }
 
   function handleInput(data: string) {
@@ -107,37 +115,40 @@
     showJumpToLive = false;
   }
 
-  function handleBackToSessions() {
-    window.location.href = '/';
-  }
-
   const composerHeight = isMobile ? 110 : 0;
   const basePath = target ? `/s/${encodeURIComponent(target)}` : '';
   const uploadUrl = `${basePath}/upload`;
 </script>
 
-{#if !target}
+{#if pageMode === 'picker'}
   <SessionPicker onSelect={handleSessionSelect} />
 {:else}
   <div class="app">
-    <StatusBar {connectionState} {paneState} {target} />
-    <div class="terminal-wrapper">
-      <TerminalView
-        bind:this={terminalRef}
-        onData={handleInput}
-        {isMobile}
-        {composerHeight}
-      />
-    </div>
+    <StatusBar {connectionState} {paneState} {target} {pageMode} />
 
-    {#if isMobile}
-      <div class="mobile-controls">
-        <QuickActions onAction={handleInput} {uploadUrl} />
-        <Composer onSend={handleInput} />
+    {#if pageMode === 'session'}
+      <div class="terminal-wrapper">
+        <TerminalView
+          bind:this={terminalRef}
+          onData={handleInput}
+          {isMobile}
+          {composerHeight}
+        />
+      </div>
+
+      {#if isMobile}
+        <div class="mobile-controls">
+          <QuickActions onAction={handleInput} {uploadUrl} />
+          <Composer onSend={handleInput} />
+        </div>
+      {/if}
+
+      <JumpToLive visible={showJumpToLive} onClick={handleJumpToLive} />
+    {:else if pageMode === 'files'}
+      <div class="files-wrapper">
+        <FileBrowser />
       </div>
     {/if}
-
-    <JumpToLive visible={showJumpToLive} onClick={handleJumpToLive} />
   </div>
 {/if}
 
@@ -148,6 +159,10 @@
     height: 100%;
   }
   .terminal-wrapper {
+    flex: 1;
+    overflow: hidden;
+  }
+  .files-wrapper {
     flex: 1;
     overflow: hidden;
   }

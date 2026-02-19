@@ -10,10 +10,12 @@
     connectionState = 'disconnected',
     paneState = 'unknown',
     target = '',
+    pageMode = 'session',
   }: {
     connectionState?: ConnectionState;
     paneState?: PaneState;
     target?: string;
+    pageMode?: string;
   } = $props();
 
   let sessions = $state<Session[]>([]);
@@ -101,13 +103,20 @@
     {#each allTargets as t}
       <button
         class="tab"
-        class:active={t.target === target}
+        class:active={t.target === target && pageMode === 'session'}
         onclick={() => navigateTo(t.target)}
         title="{t.target} — {t.command}"
       >
         <span class="tab-label">{t.label}</span>
       </button>
     {/each}
+    <button
+      class="tab files-tab"
+      class:active={pageMode === 'files'}
+      onclick={() => window.location.href = '/files/'}
+    >
+      <span class="tab-label">Files</span>
+    </button>
   </div>
   <span class="status-indicator">
     <span class="dot" style:background={stateColors[connectionState]}></span>
@@ -168,6 +177,11 @@
   .tab-label {
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+  .files-tab {
+    border-left: 1px solid var(--border);
+    margin-left: 4px;
+    padding-left: 12px;
   }
   .status-indicator {
     display: flex;
