@@ -100,6 +100,13 @@
 
 <div class="tab-bar">
   <div class="tabs">
+    <button
+      class="tab files-tab"
+      class:active={pageMode === 'files'}
+      onclick={() => window.location.href = '/files/'}
+    >
+      <span class="tab-label">Files</span>
+    </button>
     {#each allTargets as t}
       <button
         class="tab"
@@ -110,13 +117,6 @@
         <span class="tab-label">{t.label}</span>
       </button>
     {/each}
-    <button
-      class="tab files-tab"
-      class:active={pageMode === 'files'}
-      onclick={() => window.location.href = '/files/'}
-    >
-      <span class="tab-label">Files</span>
-    </button>
   </div>
   <span class="status-indicator">
     <span class="dot" style:background={stateColors[connectionState]}></span>
@@ -179,9 +179,9 @@
     text-overflow: ellipsis;
   }
   .files-tab {
-    border-left: 1px solid var(--border);
-    margin-left: 4px;
-    padding-left: 12px;
+    border-right: 1px solid var(--border);
+    margin-right: 4px;
+    padding-right: 12px;
   }
   .status-indicator {
     display: flex;
