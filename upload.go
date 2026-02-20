@@ -78,9 +78,11 @@ func NewUploadHandler(cfg *Config, ptyMgr *PTYManager, logger *slog.Logger) http
 			logger.Info("image upload deduplicated", "path", absPath, "hash", hexHash)
 		}
 
-		// Inject prompt into PTY
-		prompt := fmt.Sprintf("Analyze this image: %s\n", absPath)
-		ptyMgr.WriteInput([]byte(prompt))
+		// Inject prompt into PTY (if connected to a session)
+		if ptyMgr != nil {
+			prompt := fmt.Sprintf("Analyze this image: %s\n", absPath)
+			ptyMgr.WriteInput([]byte(prompt))
+		}
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{

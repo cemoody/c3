@@ -7,6 +7,7 @@
   import JumpToLive from './lib/JumpToLive.svelte';
   import SessionPicker from './lib/SessionPicker.svelte';
   import FileBrowser from './lib/FileBrowser.svelte';
+  import Toast from './lib/Toast.svelte';
   import { WebSocketClient, type ConnectionState, type PaneState } from './lib/websocket';
 
   const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
@@ -27,6 +28,7 @@
   let pageMode = $state<PageMode>(getPageMode());
   let target = $state<string | null>(getTargetFromPath());
   let terminalRef = $state<ReturnType<typeof TerminalView>>();
+  let toastRef: ReturnType<typeof Toast>;
   let wsClient: WebSocketClient | null = null;
   let connectionState = $state<ConnectionState>('disconnected');
   let paneState = $state<PaneState>('unknown');
@@ -57,7 +59,6 @@
   }
 
   async function handlePaste(e: ClipboardEvent) {
-    if (!target || pageMode !== 'session') return;
     const items = e.clipboardData?.items;
     if (!items) return;
 
@@ -69,11 +70,23 @@
 
         const form = new FormData();
         form.append('image', file, `paste.${item.type.split('/')[1]}`);
+
+        // Use session-scoped upload if on a session page (injects prompt),
+        // otherwise use the general upload endpoint (just saves file).
+        const uploadEndpoint = (pageMode === 'session' && target)
+          ? `${basePath}/upload`
+          : '/api/upload';
+
         try {
-          const res = await fetch(`${basePath}/upload`, { method: 'POST', body: form });
-          if (!res.ok) console.error('Upload failed:', await res.text());
+          const res = await fetch(uploadEndpoint, { method: 'POST', body: form });
+          if (!res.ok) {
+            toastRef?.show(`Upload failed: ${await res.text()}`, 'error');
+            return;
+          }
+          const json = await res.json();
+          toastRef?.show(`Saved to ${json.path}`);
         } catch (err) {
-          console.error('Paste upload error:', err);
+          toastRef?.show(`Upload error: ${err}`, 'error');
         }
         return;
       }
@@ -158,6 +171,8 @@
     {/if}
   </div>
 {/if}
+
+<Toast bind:this={toastRef} />
 
 <style>
   .app {

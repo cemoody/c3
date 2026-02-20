@@ -17,6 +17,12 @@ var frontendFS embed.FS
 func NewServer(cfg *Config, sm *SessionManager, indexer *FileIndexer, logger *slog.Logger) *http.ServeMux {
 	mux := http.NewServeMux()
 
+	// General image upload (no PTY injection — just saves the file)
+	mux.HandleFunc("POST /api/upload", func(w http.ResponseWriter, r *http.Request) {
+		// Reuse the upload handler with a nil PTY (skips prompt injection)
+		NewUploadHandler(cfg, nil, logger)(w, r)
+	})
+
 	// File browser endpoints
 	mux.HandleFunc("GET /api/files", NewFilesHandler(logger))
 	mux.HandleFunc("GET /api/files/raw", NewFileContentHandler(logger))
