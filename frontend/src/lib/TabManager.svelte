@@ -9,6 +9,7 @@
     onReorder,
     onRename,
     onNewSession,
+    onKill,
   }: {
     targets: TabItem[];
     activeTarget?: string;
@@ -17,11 +18,14 @@
     onReorder: (ordered: string[]) => void;
     onRename: (target: string, name: string) => void;
     onNewSession: (name: string) => Promise<void>;
+    onKill: (target: string) => Promise<void>;
   } = $props();
 
   let editingTarget = $state<string | null>(null);
   let editValue = $state('');
   let renameCommitted = false;
+
+  let killingTarget = $state<string | null>(null);
 
   let creatingSession = $state(false);
   let newSessionName = $state('');
@@ -200,6 +204,15 @@
           <button class="tm-edit-btn" onclick={(e) => startRename(t, e)} title="Rename">
             &#9998;
           </button>
+          <button
+            class="tm-kill-btn"
+            class:killing={killingTarget === t.target}
+            disabled={killingTarget === t.target}
+            onclick={async (e) => { e.stopPropagation(); killingTarget = t.target; await onKill(t.target); killingTarget = null; }}
+            title="Kill window"
+          >
+            {killingTarget === t.target ? '...' : '\u00d7'}
+          </button>
         </div>
       {/each}
     </div>
@@ -368,6 +381,31 @@
   .tm-edit-btn:hover {
     background: var(--bg-secondary);
     color: var(--fg);
+  }
+
+  .tm-kill-btn {
+    background: none;
+    border: none;
+    color: var(--fg-dim);
+    font-size: 16px;
+    cursor: pointer;
+    padding: 4px 6px;
+    border-radius: 4px;
+    flex-shrink: 0;
+    opacity: 0;
+    transition: opacity 0.1s;
+    line-height: 1;
+  }
+  .tm-row:hover .tm-kill-btn {
+    opacity: 1;
+  }
+  .tm-kill-btn:hover {
+    background: var(--error, #f44747);
+    color: white;
+  }
+  .tm-kill-btn.killing {
+    opacity: 0.5;
+    cursor: wait;
   }
 
   .tm-rename-input {

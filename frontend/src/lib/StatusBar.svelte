@@ -148,6 +148,20 @@
     }
   }
 
+  async function doKill(tgt: string) {
+    try {
+      const res = await fetch('/api/kill-window', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target: tgt }),
+      });
+      if (!res.ok) return;
+      // Brief delay for tmux to fully clean up before refreshing
+      await new Promise(r => setTimeout(r, 300));
+      await fetchSessions();
+    } catch {}
+  }
+
   function handleReorder(ordered: string[]) {
     saveTabOrder(ordered);
     allTargets = applyTabOrder(allTargets);
@@ -334,6 +348,7 @@
     onReorder={handleReorder}
     onRename={doRename}
     onNewSession={doNewSession}
+    onKill={doKill}
   />
 {/if}
 

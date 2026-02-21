@@ -36,6 +36,15 @@ func RenameWindow(target, name string) error {
 	return nil
 }
 
+// KillWindow kills the tmux window containing the given pane target.
+func KillWindow(target string) error {
+	cmd := exec.Command("tmux", "kill-window", "-t", target)
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("tmux kill-window failed: %w", err)
+	}
+	return nil
+}
+
 // CreateSession creates a new detached tmux session with the given name.
 func CreateSession(name string) error {
 	cmd := exec.Command("tmux", "new-session", "-d", "-s", name)

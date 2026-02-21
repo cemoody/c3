@@ -58,6 +58,23 @@ func NewServer(cfg *Config, sm *SessionManager, indexer *FileIndexer, logger *sl
 		json.NewEncoder(w).Encode(map[string]string{"ok": "true"})
 	})
 
+	// Kill tmux window
+	mux.HandleFunc("POST /api/kill-window", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Target string `json:"target"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Target == "" {
+			http.Error(w, "missing target", http.StatusBadRequest)
+			return
+		}
+		if err := KillWindow(body.Target); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"ok": "true"})
+	})
+
 	// Create new tmux session
 	mux.HandleFunc("POST /api/new-session", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {

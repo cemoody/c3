@@ -470,6 +470,86 @@ async function main() {
     ws.close();
   });
 
+  // ---- Kill window tests ----
+
+  await test('POST /api/kill-window kills a tmux window', async () => {
+    // Create a throwaway session to kill
+    setupTmux('e2e-kill-test');
+    await sleep(500);
+
+    // Verify it exists
+    let res = await httpGet('/api/sessions');
+    let data = JSON.parse(res.body);
+    let names = data.sessions.map(s => s.name);
+    assert.ok(names.includes('e2e-kill-test'), 'session should exist before kill');
+
+    // Kill its window
+    const killRes = await new Promise((resolve, reject) => {
+      const body = JSON.stringify({ target: 'e2e-kill-test:0.0' });
+      const req = http.request(`${BASE}/api/kill-window`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+      }, (resp) => {
+        let d = '';
+        resp.on('data', chunk => d += chunk);
+        resp.on('end', () => resolve({ status: resp.statusCode, body: d }));
+      });
+      req.on('error', reject);
+      req.write(body);
+      req.end();
+    });
+
+    assert.strictEqual(killRes.status, 200, `kill should return 200, got ${killRes.status}: ${killRes.body}`);
+    const killData = JSON.parse(killRes.body);
+    assert.strictEqual(killData.ok, 'true');
+
+    await sleep(500);
+
+    // Verify it's gone
+    res = await httpGet('/api/sessions');
+    data = JSON.parse(res.body);
+    names = data.sessions.map(s => s.name);
+    assert.ok(!names.includes('e2e-kill-test'), `session should be gone after kill, still found: ${names.join(', ')}`);
+  });
+
+  await test('POST /api/kill-window returns 400 for missing target', async () => {
+    const res = await new Promise((resolve, reject) => {
+      const body = JSON.stringify({});
+      const req = http.request(`${BASE}/api/kill-window`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+      }, (resp) => {
+        let d = '';
+        resp.on('data', chunk => d += chunk);
+        resp.on('end', () => resolve({ status: resp.statusCode, body: d }));
+      });
+      req.on('error', reject);
+      req.write(body);
+      req.end();
+    });
+
+    assert.strictEqual(res.status, 400, `should return 400 for missing target, got ${res.status}`);
+  });
+
+  await test('POST /api/kill-window returns 500 for nonexistent target', async () => {
+    const res = await new Promise((resolve, reject) => {
+      const body = JSON.stringify({ target: 'nonexistent-session:99.99' });
+      const req = http.request(`${BASE}/api/kill-window`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+      }, (resp) => {
+        let d = '';
+        resp.on('data', chunk => d += chunk);
+        resp.on('end', () => resolve({ status: resp.statusCode, body: d }));
+      });
+      req.on('error', reject);
+      req.write(body);
+      req.end();
+    });
+
+    assert.strictEqual(res.status, 500, `should return 500 for nonexistent target, got ${res.status}`);
+  });
+
   // ---- Summary ----
 
   console.log(`\n${passed + failed} tests: ${passed} passed, ${failed} failed`);
