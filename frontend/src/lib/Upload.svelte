@@ -30,7 +30,7 @@
   }
 </script>
 
-<label class="upload-btn" class:uploading>
+<label class="action-icon" class:uploading title="Upload image">
   <input
     type="file"
     accept="image/png,image/jpeg,image/webp"
@@ -38,36 +38,52 @@
     onchange={handleFileInput}
     hidden
   />
-  {uploading ? 'Uploading...' : 'Image'}
+  {#if uploading}
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon spin"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+  {:else}
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
+  {/if}
 </label>
 {#if error}
   <span class="error">{error}</span>
 {/if}
 
 <style>
-  .upload-btn {
+  .action-icon {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 44px;
-    min-height: 44px;
-    padding: 8px 14px;
+    width: 44px;
+    height: 44px;
     background: var(--bg, #1e1e1e);
     color: var(--fg, #d4d4d4);
     border: 1px solid var(--border, #444);
-    border-radius: 20px;
-    font-size: 13px;
-    font-family: inherit;
+    border-radius: 10px;
     cursor: pointer;
+    flex-shrink: 0;
   }
 
-  .upload-btn:hover {
-    background: #333;
+  .action-icon:active {
+    background: var(--accent, #0e639c);
+    color: white;
   }
 
-  .upload-btn.uploading {
+  .action-icon.uploading {
     opacity: 0.6;
     pointer-events: none;
+  }
+
+  .icon {
+    width: 20px;
+    height: 20px;
+  }
+
+  .spin {
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
   }
 
   .error {

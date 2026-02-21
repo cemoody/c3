@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { ConnectionState, PaneState } from './websocket';
+  import TabManager from './TabManager.svelte';
 
   type Pane = { index: string; currentCommand: string; target: string };
   type Window = { index: string; name: string; panes: Pane[] };
@@ -43,6 +44,36 @@
   let editValue = $state('');
 
   let renameCommitted = false;
+
+  // Tab Manager modal state
+  let tabManagerOpen = $state(false);
+
+  // Custom tab ordering from localStorage
+  const TAB_ORDER_KEY = 'c3-tab-order';
+
+  function loadTabOrder(): string[] {
+    try {
+      const saved = localStorage.getItem(TAB_ORDER_KEY);
+      return saved ? JSON.parse(saved) : [];
+    } catch { return []; }
+  }
+
+  function saveTabOrder(order: string[]) {
+    localStorage.setItem(TAB_ORDER_KEY, JSON.stringify(order));
+  }
+
+  function applyTabOrder(targets: typeof allTargets): typeof allTargets {
+    const order = loadTabOrder();
+    if (order.length === 0) return targets;
+
+    const orderMap = new Map(order.map((t, i) => [t, i]));
+    return [...targets].sort((a, b) => {
+      const ai = orderMap.get(a.target) ?? Infinity;
+      const bi = orderMap.get(b.target) ?? Infinity;
+      if (ai === Infinity && bi === Infinity) return 0;
+      return ai - bi;
+    });
+  }
 
   async function startRename(t: {target: string; label: string; windowName: string}, e: MouseEvent) {
     // Only allow renaming the active tab
@@ -91,6 +122,37 @@
     }
   }
 
+  async function doRename(tgt: string, name: string) {
+    try {
+      await fetch('/api/rename', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target: tgt, name }),
+      });
+      await fetchSessions();
+    } catch {}
+  }
+
+  async function doNewSession(name: string) {
+    const res = await fetch('/api/new-session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    });
+    if (!res.ok) throw new Error('Failed to create session');
+    await fetchSessions();
+    // Navigate to the new session's first pane
+    const newTarget = allTargets.find(t => t.target.startsWith(name + ':'));
+    if (newTarget) {
+      window.location.href = `/s/${encodeURIComponent(newTarget.target)}/`;
+    }
+  }
+
+  function handleReorder(ordered: string[]) {
+    saveTabOrder(ordered);
+    allTargets = applyTabOrder(allTargets);
+  }
+
   async function fetchSessions() {
     try {
       const res = await fetch('/api/sessions');
@@ -104,14 +166,14 @@
           for (const pane of win.panes) {
             targets.push({
               target: pane.target,
-              label: `${sess.name}:${win.name}`,
+              label: win.name,
               windowName: win.name,
               command: pane.currentCommand,
             });
           }
         }
       }
-      allTargets = targets;
+      allTargets = applyTabOrder(targets);
       updatePrefetch();
     } catch {}
   }
@@ -217,6 +279,12 @@
     >
       <span class="tab-label">Files</span>
     </a>
+    <button
+      class="tab tabs-btn"
+      onclick={() => tabManagerOpen = !tabManagerOpen}
+    >
+      <span class="tab-label">Tabs</span>
+    </button>
     {#each allTargets as t}
       <a
         class="tab"
@@ -256,6 +324,18 @@
     <span class="hint">&#8984;[ / &#8984;]</span>
   {/if}
 </div>
+
+{#if tabManagerOpen}
+  <TabManager
+    targets={allTargets}
+    activeTarget={target}
+    onClose={() => tabManagerOpen = false}
+    onNavigate={navigateTo}
+    onReorder={handleReorder}
+    onRename={doRename}
+    onNewSession={doNewSession}
+  />
+{/if}
 
 <style>
   .tab-bar {
@@ -320,6 +400,11 @@
     outline: none;
   }
   .files-tab {
+    border-right: 1px solid var(--border);
+    margin-right: 4px;
+    padding-right: 12px;
+  }
+  .tabs-btn {
     border-right: 1px solid var(--border);
     margin-right: 4px;
     padding-right: 12px;

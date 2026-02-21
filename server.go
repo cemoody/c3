@@ -58,6 +58,23 @@ func NewServer(cfg *Config, sm *SessionManager, indexer *FileIndexer, logger *sl
 		json.NewEncoder(w).Encode(map[string]string{"ok": "true"})
 	})
 
+	// Create new tmux session
+	mux.HandleFunc("POST /api/new-session", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Name string `json:"name"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Name == "" {
+			http.Error(w, "missing name", http.StatusBadRequest)
+			return
+		}
+		if err := CreateSession(body.Name); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"ok": "true"})
+	})
+
 	// Session list endpoint
 	mux.HandleFunc("GET /api/sessions", func(w http.ResponseWriter, r *http.Request) {
 		sessions, err := ListSessions()
