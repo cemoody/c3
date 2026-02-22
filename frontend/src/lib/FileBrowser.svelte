@@ -19,6 +19,7 @@
   let mdDirty = $state(false);
   let mdSaving = $state(false);
   let mdPreviewPath = $state('');
+  let textPreviewContent = $state<string | null>(null);
 
   // Auto-focus the preview overlay so it receives keyboard events
   $effect(() => {
@@ -82,8 +83,13 @@
     return /\.(md|markdown|mdx)$/i.test(name);
   }
 
+  function isTextFile(name: string): boolean {
+    return /\.(txt|log|csv|json|yaml|yml|toml|xml|py|js|ts|jsx|tsx|sh|bash|zsh|go|rs|c|cpp|h|hpp|java|rb|php|css|scss|less|sql|r|lua|env|ini|conf|cfg|svelte|vue|swift|kt|scala|makefile|dockerfile)$/i.test(name)
+      || /^(Makefile|Dockerfile|Rakefile|Gemfile|Procfile)$/i.test(name);
+  }
+
   function isPreviewable(name: string): boolean {
-    return isImage(name) || isMarkdown(name);
+    return isImage(name) || isMarkdown(name) || isTextFile(name);
   }
 
   function isPlot(name: string): boolean {
@@ -107,9 +113,19 @@
       // Close image preview if open
       previewUrl = null;
       await openMarkdown(filePath);
-    } else if (name.endsWith('.html')) {
-      window.open(`/api/files/raw?path=${encodeURIComponent(filePath)}`, '_blank');
-    } else if (name.endsWith('.pdf')) {
+    } else if (isTextFile(name)) {
+      previewUrl = null;
+      mdPreviewPath = '';
+      textPreviewContent = null;
+      previewName = name;
+      previewFullPath = filePath;
+      try {
+        const res = await fetch(`/api/files/raw?path=${encodeURIComponent(filePath)}`);
+        if (res.ok) {
+          textPreviewContent = await res.text();
+        }
+      } catch {}
+    } else if (name.endsWith('.html') || name.endsWith('.pdf')) {
       window.open(`/api/files/raw?path=${encodeURIComponent(filePath)}`, '_blank');
     } else {
       const dir = filePath.replace(/\/[^/]+$/, '');
@@ -163,6 +179,7 @@
   function closePreview() {
     previewUrl = null;
     mdPreviewPath = '';
+    textPreviewContent = null;
     previewName = '';
     previewFullPath = '';
     mdEditing = false;
@@ -229,15 +246,7 @@
   function previewSelectedResult() {
     if (searchResults.length === 0) return;
     const fullPath = resolveSearchResult(searchResults[selectedIndex]);
-    const name = searchResults[selectedIndex].split('/').pop() || '';
-    if (isImage(name)) {
-      previewUrl = `/api/files/raw?path=${encodeURIComponent(fullPath)}`;
-      previewName = name;
-      previewFullPath = fullPath;
-    } else {
-      // Non-image: open it (HTML in new tab, etc.)
-      openFilePath(fullPath);
-    }
+    openFilePath(fullPath);
   }
 
   function onSearchKeydown(e: KeyboardEvent) {
@@ -347,7 +356,7 @@
     </div>
   {/if}
 
-  {#if previewUrl || mdPreviewPath}
+  {#if previewUrl || mdPreviewPath || textPreviewContent !== null}
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div bind:this={previewOverlayEl} class="preview-overlay" onclick={closePreview} onkeydown={(e) => {
       if (e.key === 'Escape') closePreview();
@@ -389,6 +398,8 @@
           {:else}
             <div class="md-preview">{@html mdRendered}</div>
           {/if}
+        {:else if textPreviewContent !== null}
+          <pre class="text-preview">{textPreviewContent}</pre>
         {/if}
       </div>
     </div>
@@ -676,6 +687,19 @@
     border: 1px solid var(--border);
     padding: 6px 10px;
     text-align: left;
+  }
+  .text-preview {
+    flex: 1;
+    overflow: auto;
+    padding: 16px 24px;
+    margin: 0;
+    font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--fg);
+    white-space: pre-wrap;
+    word-break: break-all;
+    tab-size: 4;
   }
   .md-editor {
     flex: 1;
