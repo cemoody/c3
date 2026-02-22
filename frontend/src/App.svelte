@@ -138,6 +138,33 @@
     showJumpToLive = false;
   }
 
+  async function handleFileClick(filePath: string) {
+    // Absolute paths are ready to use
+    if (filePath.startsWith('/')) {
+      previewFilePath = filePath;
+      return;
+    }
+    // Relative paths: resolve against the pane's current working directory
+    try {
+      const res = await fetch('/api/sessions');
+      if (res.ok) {
+        const data = await res.json();
+        for (const sess of data.sessions || []) {
+          for (const win of sess.windows) {
+            for (const pane of win.panes) {
+              if (pane.target === target && pane.currentPath) {
+                previewFilePath = pane.currentPath.replace(/\/$/, '') + '/' + filePath.replace(/^\.\//, '');
+                return;
+              }
+            }
+          }
+        }
+      }
+    } catch {}
+    // Fallback: use as-is
+    previewFilePath = filePath;
+  }
+
   const composerHeight = isMobile ? 110 : 0;
   const basePath = target ? `/s/${encodeURIComponent(target)}` : '';
   const uploadUrl = `${basePath}/upload`;
@@ -154,7 +181,7 @@
         <TerminalView
           bind:this={terminalRef}
           onData={handleInput}
-          onFileClick={(path) => previewFilePath = path}
+          onFileClick={handleFileClick}
           {isMobile}
           {composerHeight}
         />

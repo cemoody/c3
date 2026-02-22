@@ -16,8 +16,9 @@
     composerHeight?: number;
   } = $props();
 
-  // Regex for absolute file paths with extensions (avoids bare dirs like /dev/)
-  const FILE_PATH_RE = /((?:\/[\w.@+\-]+)+\.[\w]+)/g;
+  // Regex for file paths with extensions — matches both absolute (/path/to/file.ext)
+  // and relative (dir/subdir/file.ext, ./file.ext, ../file.ext)
+  const FILE_PATH_RE = /((?:\.\.?\/|\/)(?:[\w.@+\-]+\/)*[\w.@+\-]+\.[\w]+|(?:[\w@+\-]+\/)+[\w.@+\-]+\.[\w]+)/g;
 
   let containerEl: HTMLDivElement;
   let terminal: Terminal;

@@ -3,7 +3,7 @@
   import type { ConnectionState, PaneState } from './websocket';
   import TabManager from './TabManager.svelte';
 
-  type Pane = { index: string; currentCommand: string; target: string; claudeState?: string };
+  type Pane = { index: string; currentCommand: string; target: string; claudeState?: string; currentPath?: string };
   type Window = { index: string; name: string; panes: Pane[] };
   type Session = { name: string; windows: Window[] };
 
