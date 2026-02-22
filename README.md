@@ -10,6 +10,8 @@ c3 is a single-binary web UI that wraps tmux — built for running Claude Code o
 - File browser with markdown preview and editing
 - Image upload via paste or camera capture
 - Arrow pad d-pad for mobile navigation
+- Clickable file paths in terminal output with preview modal
+- Tab state coloring for Claude Code sessions (waiting/active)
 - One binary, zero dependencies (Svelte 5 frontend embedded)
 
 ## Get Started
@@ -58,3 +60,20 @@ make
 | `--ring-buffer-size` | `RING_BUFFER_SIZE` | `16777216` | Ring buffer size in bytes |
 
 A systemd unit file is included at `c3.service`.
+
+## Tab State Coloring
+
+c3 can color-code tabs based on Claude Code's state — yellow when Claude is waiting for your input, green when actively working. This uses Claude Code's [hooks system](https://code.claude.com/docs/en/hooks).
+
+Add to `~/.claude/settings.json`:
+
+```json
+{
+  "hooks": {
+    "Stop": [{ "hooks": [{ "type": "command", "command": "tmux set-option -p @claude-state waiting 2>/dev/null", "async": true, "timeout": 5 }] }],
+    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "tmux set-option -p @claude-state active 2>/dev/null", "async": true, "timeout": 5 }] }]
+  }
+}
+```
+
+This sets a per-pane tmux variable that c3 reads on each poll. No restart needed — tabs will start showing state colors immediately.

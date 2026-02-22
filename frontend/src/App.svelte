@@ -8,6 +8,7 @@
   import SessionPicker from './lib/SessionPicker.svelte';
   import FileBrowser from './lib/FileBrowser.svelte';
   import Toast from './lib/Toast.svelte';
+  import FilePreview from './lib/FilePreview.svelte';
   import { WebSocketClient, type ConnectionState, type PaneState } from './lib/websocket';
 
   const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
@@ -33,6 +34,7 @@
   let connectionState = $state<ConnectionState>('disconnected');
   let paneState = $state<PaneState>('unknown');
   let showJumpToLive = $state(false);
+  let previewFilePath = $state<string | null>(null);
   let scrollCheckInterval: ReturnType<typeof setInterval> | null = null;
 
   function connectToTarget(t: string) {
@@ -98,7 +100,8 @@
       connectToTarget(target);
     }
 
-    document.addEventListener('paste', handlePaste);
+    // Use capture phase so image paste is detected before xterm.js consumes the event
+    document.addEventListener('paste', handlePaste, true);
 
     scrollCheckInterval = setInterval(() => {
       if (terminalRef && !terminalRef.isAtBottom()) {
@@ -116,7 +119,7 @@
     }, 500);
 
     return () => {
-      document.removeEventListener('paste', handlePaste);
+      document.removeEventListener('paste', handlePaste, true);
       wsClient?.disconnect();
       if (scrollCheckInterval) clearInterval(scrollCheckInterval);
     };
@@ -151,6 +154,7 @@
         <TerminalView
           bind:this={terminalRef}
           onData={handleInput}
+          onFileClick={(path) => previewFilePath = path}
           {isMobile}
           {composerHeight}
         />
@@ -170,6 +174,10 @@
       </div>
     {/if}
   </div>
+{/if}
+
+{#if previewFilePath}
+  <FilePreview path={previewFilePath} onClose={() => previewFilePath = null} />
 {/if}
 
 <Toast bind:this={toastRef} />

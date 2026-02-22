@@ -106,16 +106,17 @@ type TmuxWindow struct {
 }
 
 type TmuxPane struct {
-	Index      string `json:"index"`
-	CurrentCmd string `json:"currentCommand"`
-	Target     string `json:"target"` // "session:window.pane"
+	Index       string `json:"index"`
+	CurrentCmd  string `json:"currentCommand"`
+	Target      string `json:"target"`      // "session:window.pane"
+	ClaudeState string `json:"claudeState"` // "waiting", "active", or ""
 }
 
 // ListSessions returns all tmux sessions with their windows and panes.
 func ListSessions() ([]TmuxSession, error) {
 	// List all panes across all sessions with format fields
 	cmd := exec.Command("tmux", "list-panes", "-a", "-F",
-		"#{session_name}\t#{window_index}\t#{window_name}\t#{pane_index}\t#{pane_current_command}")
+		"#{session_name}\t#{window_index}\t#{window_name}\t#{pane_index}\t#{pane_current_command}\t#{@claude-state}")
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("tmux list-panes failed: %w", err)
@@ -129,11 +130,15 @@ func ListSessions() ([]TmuxSession, error) {
 		if line == "" {
 			continue
 		}
-		parts := strings.SplitN(line, "\t", 5)
+		parts := strings.SplitN(line, "\t", 6)
 		if len(parts) < 5 {
 			continue
 		}
 		sessName, winIdx, winName, paneIdx, paneCmd := parts[0], parts[1], parts[2], parts[3], parts[4]
+		claudeState := ""
+		if len(parts) >= 6 {
+			claudeState = parts[5]
+		}
 
 		sess, ok := sessionMap[sessName]
 		if !ok {
@@ -152,9 +157,10 @@ func ListSessions() ([]TmuxSession, error) {
 
 		target := fmt.Sprintf("%s:%s.%s", sessName, winIdx, paneIdx)
 		pane := TmuxPane{
-			Index:      paneIdx,
-			CurrentCmd: paneCmd,
-			Target:     target,
+			Index:       paneIdx,
+			CurrentCmd:  paneCmd,
+			Target:      target,
+			ClaudeState: claudeState,
 		}
 		win.Panes = append(win.Panes, pane)
 	}

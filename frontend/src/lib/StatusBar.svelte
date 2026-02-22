@@ -3,7 +3,7 @@
   import type { ConnectionState, PaneState } from './websocket';
   import TabManager from './TabManager.svelte';
 
-  type Pane = { index: string; currentCommand: string; target: string };
+  type Pane = { index: string; currentCommand: string; target: string; claudeState?: string };
   type Window = { index: string; name: string; panes: Pane[] };
   type Session = { name: string; windows: Window[] };
 
@@ -20,7 +20,11 @@
   } = $props();
 
   let sessions = $state<Session[]>([]);
-  let allTargets = $state<{target: string; label: string; windowName: string; command: string}[]>([]);
+  let allTargets = $state<{target: string; label: string; windowName: string; command: string; claudeState: string}[]>([]);
+
+  // Track which tabs have unseen changes
+  let unseenTargets = $state<Set<string>>(new Set());
+  let prevClaudeStates = new Map<string, string>();
 
   const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
@@ -183,9 +187,20 @@
               label: win.name,
               windowName: win.name,
               command: pane.currentCommand,
+              claudeState: pane.claudeState || '',
             });
           }
         }
+      }
+      // Track state transitions for unseen detection
+      for (const t of targets) {
+        const prev = prevClaudeStates.get(t.target);
+        // If state changed to "waiting" on a tab we're not viewing, mark unseen
+        if (t.claudeState === 'waiting' && prev === 'active' && t.target !== target) {
+          unseenTargets.add(t.target);
+          unseenTargets = new Set(unseenTargets);
+        }
+        prevClaudeStates.set(t.target, t.claudeState);
       }
       allTargets = applyTabOrder(targets);
       updatePrefetch();
@@ -274,8 +289,14 @@
   });
 
   onMount(() => {
+    // Clear unseen for the tab we're currently viewing
+    if (target && pageMode === 'session') {
+      unseenTargets.delete(target);
+      unseenTargets = new Set(unseenTargets);
+    }
     fetchSessions();
-    const interval = setInterval(fetchSessions, 10000);
+    // Poll more frequently (3s) to pick up claude state changes quickly
+    const interval = setInterval(fetchSessions, 3000);
     document.addEventListener('keydown', handleKeydown);
     return () => {
       clearInterval(interval);
@@ -303,6 +324,8 @@
       <a
         class="tab"
         class:active={t.target === target && pageMode === 'session'}
+        class:claude-waiting={t.claudeState === 'waiting'}
+        class:claude-active={t.claudeState === 'active'}
         href="/s/{encodeURIComponent(t.target)}/"
         title="{t.target} — {t.command}"
       >
@@ -324,6 +347,9 @@
             tabindex="0"
             onclick={(e) => { if (t.target === target && pageMode === 'session') { e.preventDefault(); e.stopPropagation(); startRename(t, e); } }}
           >{t.label}</span>
+          {#if unseenTargets.has(t.target)}
+            <span class="unseen-dot"></span>
+          {/if}
         {/if}
       </a>
     {/each}
@@ -398,6 +424,27 @@
     border-color: var(--accent);
     color: var(--fg);
     font-weight: 600;
+  }
+  .tab.claude-waiting {
+    border-color: var(--warning, #b58900);
+    background: color-mix(in srgb, var(--warning, #b58900) 12%, transparent);
+  }
+  .tab.claude-waiting.active {
+    border-color: var(--warning, #b58900);
+  }
+  .tab.claude-active {
+    border-color: var(--success, #859900);
+    background: color-mix(in srgb, var(--success, #859900) 8%, transparent);
+  }
+  .tab.claude-active.active {
+    border-color: var(--success, #859900);
+  }
+  .unseen-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--warning, #b58900);
+    flex-shrink: 0;
   }
   .tab-label {
     overflow: hidden;

@@ -1,5 +1,5 @@
 <script lang="ts">
-  type TabItem = { target: string; label: string; windowName: string; command: string };
+  type TabItem = { target: string; label: string; windowName: string; command: string; claudeState: string };
 
   let {
     targets,
@@ -182,6 +182,15 @@
         >
           <span class="tm-drag-handle" title="Drag to reorder">&#9776;</span>
 
+          {#if t.claudeState}
+            <span
+              class="tm-state-dot"
+              class:waiting={t.claudeState === 'waiting'}
+              class:active={t.claudeState === 'active'}
+              title={t.claudeState === 'waiting' ? 'Waiting for input' : 'Active'}
+            ></span>
+          {/if}
+
           {#if editingTarget === t.target}
             <input
               class="tm-rename-input"
@@ -342,6 +351,25 @@
   }
   .tm-drag-handle:active {
     cursor: grabbing;
+  }
+
+  .tm-state-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .tm-state-dot.waiting {
+    background: var(--warning, #b58900);
+    box-shadow: 0 0 4px var(--warning, #b58900);
+  }
+  .tm-state-dot.active {
+    background: var(--success, #859900);
+    animation: tm-pulse 1.5s ease-in-out infinite;
+  }
+  @keyframes tm-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
   }
 
   .tm-name {

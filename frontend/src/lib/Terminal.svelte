@@ -6,13 +6,18 @@
 
   let {
     onData,
+    onFileClick,
     isMobile = false,
     composerHeight = 0,
   }: {
     onData: (data: string) => void;
+    onFileClick?: (path: string) => void;
     isMobile?: boolean;
     composerHeight?: number;
   } = $props();
+
+  // Regex for absolute file paths with extensions (avoids bare dirs like /dev/)
+  const FILE_PATH_RE = /((?:\/[\w.@+\-]+)+\.[\w]+)/g;
 
   let containerEl: HTMLDivElement;
   let terminal: Terminal;
@@ -99,6 +104,37 @@
 
     terminal.loadAddon(new WebLinksAddon());
     terminal.open(containerEl);
+
+    // Custom link provider for file paths in terminal output
+    // Must be registered AFTER terminal.open() so the link system is initialized
+    terminal.registerLinkProvider({
+      provideLinks(y: number, callback: (links: any[] | undefined) => void) {
+        const fileClickFn = onFileClick;
+        if (!fileClickFn) { callback(undefined); return; }
+        const line = terminal.buffer.active.getLine(y - 1);
+        if (!line) { callback(undefined); return; }
+        const text = line.translateToString(true);
+        const links: any[] = [];
+        const re = new RegExp(FILE_PATH_RE.source, 'g');
+        let match: RegExpExecArray | null;
+        while ((match = re.exec(text)) !== null) {
+          const startX = match.index + 1; // xterm ranges are 1-indexed
+          const endX = startX + match[0].length - 1;
+          const filePath = match[0];
+          links.push({
+            range: {
+              start: { x: startX, y },
+              end: { x: endX, y },
+            },
+            text: filePath,
+            activate() {
+              fileClickFn(filePath);
+            },
+          });
+        }
+        callback(links.length > 0 ? links : undefined);
+      },
+    });
 
     if (!isMobile) {
       terminal.onData((data: string) => onData(data));
