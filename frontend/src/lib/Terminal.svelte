@@ -44,13 +44,15 @@
   }
 
   // Calculate the font size that makes `cols` characters fit the container width.
+  // On mobile, use a readable font size and allow horizontal scrolling instead.
   function calcFontSize(cols: number): number {
     if (!containerEl || cols <= 0) return isMobile ? 12 : 14;
+    if (isMobile) return 12; // Fixed readable size; container scrolls horizontally
     const availWidth = containerEl.clientWidth - 20; // 20px for scrollbar + padding
     // Monospace char width ≈ fontSize * 0.6
     const ideal = availWidth / (cols * 0.602);
-    const min = isMobile ? 6 : 8;
-    const max = isMobile ? 12 : 16;
+    const min = 8;
+    const max = 16;
     return Math.max(min, Math.min(max, Math.floor(ideal * 10) / 10));
   }
 
@@ -185,5 +187,12 @@
     width: 100%;
     height: 100%;
     overflow: hidden;
+  }
+  /* On mobile, allow horizontal scroll for readable font size */
+  @media (max-width: 768px) {
+    .terminal-container {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
   }
 </style>
