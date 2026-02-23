@@ -55,6 +55,8 @@
   }
 
   // Set the terminal to match the pane dimensions, scaling the font to fit.
+  // On mobile, cap rows to what fits in the container so content doesn't
+  // extend behind the mobile controls.
   export function setDimensions(cols: number, rows: number) {
     if (!terminal || cols <= 0 || rows <= 0) return;
     paneCols = cols;
@@ -62,7 +64,19 @@
 
     const fontSize = calcFontSize(cols);
     terminal.options.fontSize = fontSize;
-    terminal.resize(cols, rows);
+
+    let effectiveRows = rows;
+    if (isMobile && containerEl) {
+      const availHeight = containerEl.clientHeight;
+      // Estimate cell height: fontSize * lineHeight (~1.2)
+      const cellHeight = fontSize * 1.2;
+      const maxRows = Math.floor(availHeight / cellHeight);
+      if (maxRows > 0 && maxRows < rows) {
+        effectiveRows = maxRows;
+      }
+    }
+
+    terminal.resize(cols, effectiveRows);
     // Re-focus after resize — resizing can drop focus
     if (!isMobile) terminal.focus();
     // On mobile, scroll to bottom so the input prompt is visible
