@@ -9,6 +9,7 @@
   import FileBrowser from './lib/FileBrowser.svelte';
   import Toast from './lib/Toast.svelte';
   import FilePreview from './lib/FilePreview.svelte';
+  import Settings from './lib/Settings.svelte';
   import { WebSocketClient, type ConnectionState, type PaneState } from './lib/websocket';
 
   const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
@@ -36,6 +37,32 @@
   let showJumpToLive = $state(false);
   let previewFilePath = $state<string | null>(null);
   let scrollCheckInterval: ReturnType<typeof setInterval> | null = null;
+  let settingsOpen = $state(false);
+
+  const FONT_SIZE_KEY = 'c3-font-size';
+  let fontSizeOverride = $state<number | null>((() => {
+    try {
+      const saved = localStorage.getItem(FONT_SIZE_KEY);
+      return saved ? Number(saved) : null;
+    } catch { return null; }
+  })());
+
+  function handleFontSizeChange(size: number | null) {
+    fontSizeOverride = size;
+    if (size !== null) {
+      localStorage.setItem(FONT_SIZE_KEY, String(size));
+    } else {
+      localStorage.removeItem(FONT_SIZE_KEY);
+    }
+  }
+
+  function handleFitWidth() {
+    if (!terminalRef) return;
+    const fitted = terminalRef.fitToWidth();
+    const clamped = Math.max(4, Math.min(18, Math.round(fitted)));
+    fontSizeOverride = clamped;
+    localStorage.setItem(FONT_SIZE_KEY, String(clamped));
+  }
 
   function connectToTarget(t: string) {
     const basePath = `/s/${encodeURIComponent(t)}`;
@@ -173,7 +200,7 @@
   <SessionPicker onSelect={handleSessionSelect} />
 {:else}
   <div class="app">
-    <StatusBar {connectionState} {paneState} {target} {pageMode} />
+    <StatusBar {connectionState} {paneState} {target} {pageMode} onSettingsToggle={() => settingsOpen = !settingsOpen} />
 
     {#if pageMode === 'session'}
       <div class="terminal-wrapper">
@@ -182,6 +209,7 @@
           onData={handleInput}
           onFileClick={handleFileClick}
           {isMobile}
+          {fontSizeOverride}
         />
       </div>
 
@@ -203,6 +231,15 @@
 
 {#if previewFilePath}
   <FilePreview path={previewFilePath} onClose={() => previewFilePath = null} />
+{/if}
+
+{#if settingsOpen}
+  <Settings
+    fontSize={fontSizeOverride}
+    onFontSizeChange={handleFontSizeChange}
+    onFitWidth={handleFitWidth}
+    onClose={() => settingsOpen = false}
+  />
 {/if}
 
 <Toast bind:this={toastRef} />

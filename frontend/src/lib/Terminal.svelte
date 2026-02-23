@@ -8,10 +8,12 @@
     onData,
     onFileClick,
     isMobile = false,
+    fontSizeOverride = null,
   }: {
     onData: (data: string) => void;
     onFileClick?: (path: string) => void;
     isMobile?: boolean;
+    fontSizeOverride?: number | null;
   } = $props();
 
   // Regex for file paths with extensions — matches both absolute (/path/to/file.ext)
@@ -44,6 +46,7 @@
   // Calculate the font size that makes `cols` characters fit the container width.
   // On mobile, use a readable font size and allow horizontal scrolling instead.
   function calcFontSize(cols: number): number {
+    if (fontSizeOverride !== null) return fontSizeOverride;
     if (!containerEl || cols <= 0) return isMobile ? 12 : 14;
     if (isMobile) return 12; // Fixed readable size; container scrolls horizontally
     const availWidth = containerEl.clientWidth - 20; // 20px for scrollbar + padding
@@ -52,6 +55,14 @@
     const min = 8;
     const max = 16;
     return Math.max(min, Math.min(max, Math.floor(ideal * 10) / 10));
+  }
+
+  // Calculate the font size that fits all columns in the container width (no capping).
+  export function fitToWidth(): number {
+    if (!containerEl || paneCols <= 0) return 12;
+    const availWidth = containerEl.clientWidth - 20;
+    const ideal = availWidth / (paneCols * 0.602);
+    return Math.round(ideal * 10) / 10;
   }
 
   // Set the terminal to match the pane dimensions, scaling the font to fit.
@@ -86,7 +97,7 @@
   onMount(() => {
     terminal = new Terminal({
       scrollback: 50000,
-      fontSize: isMobile ? 12 : 14,
+      fontSize: fontSizeOverride ?? (isMobile ? 12 : 14),
       fontFamily: "'Menlo', 'Monaco', 'Courier New', monospace",
       cursorBlink: true,
       convertEol: false,
@@ -181,6 +192,15 @@
       observer.disconnect();
       document.removeEventListener('visibilitychange', onVisibility);
     };
+  });
+
+  // Re-apply dimensions when fontSizeOverride changes
+  $effect(() => {
+    // Access fontSizeOverride to track it
+    const _ = fontSizeOverride;
+    if (terminal && paneCols > 0 && paneRows > 0) {
+      setDimensions(paneCols, paneRows);
+    }
   });
 
   onDestroy(() => {

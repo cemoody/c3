@@ -12,11 +12,13 @@
     paneState = 'unknown',
     target = '',
     pageMode = 'session',
+    onSettingsToggle,
   }: {
     connectionState?: ConnectionState;
     paneState?: PaneState;
     target?: string;
     pageMode?: string;
+    onSettingsToggle?: () => void;
   } = $props();
 
   let sessions = $state<Session[]>([]);
@@ -320,6 +322,13 @@
     >
       <span class="tab-label">Tabs</span>
     </button>
+    <button
+      class="tab settings-btn"
+      onclick={onSettingsToggle}
+      title="Settings"
+    >
+      <span class="tab-label">&#9881;</span>
+    </button>
     {#each allTargets as t}
       <a
         class="tab"
@@ -481,6 +490,11 @@
   .status-label {
     font-size: 11px;
     color: var(--fg-dim);
+  }
+  .settings-btn {
+    border-right: 1px solid var(--border);
+    margin-right: 4px;
+    padding-right: 12px;
   }
   .dot {
     width: 7px;
