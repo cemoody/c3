@@ -165,7 +165,6 @@
     previewFilePath = filePath;
   }
 
-  const composerHeight = isMobile ? 110 : 0;
   const basePath = target ? `/s/${encodeURIComponent(target)}` : '';
   const uploadUrl = `${basePath}/upload`;
 </script>
@@ -183,7 +182,6 @@
           onData={handleInput}
           onFileClick={handleFileClick}
           {isMobile}
-          {composerHeight}
         />
       </div>
 
@@ -217,6 +215,8 @@
   }
   .terminal-wrapper {
     flex: 1;
+    min-height: 0;
+    position: relative;
     overflow: hidden;
   }
   .files-wrapper {
@@ -224,10 +224,7 @@
     overflow: hidden;
   }
   .mobile-controls {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
+    flex-shrink: 0;
     z-index: 10;
   }
 </style>

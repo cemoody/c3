@@ -8,12 +8,10 @@
     onData,
     onFileClick,
     isMobile = false,
-    composerHeight = 0,
   }: {
     onData: (data: string) => void;
     onFileClick?: (path: string) => void;
     isMobile?: boolean;
-    composerHeight?: number;
   } = $props();
 
   // Regex for file paths with extensions — matches both absolute (/path/to/file.ext)
@@ -179,14 +177,16 @@
 <div
   bind:this={containerEl}
   class="terminal-container"
-  style:padding-bottom="{composerHeight}px"
 ></div>
 
 <style>
   .terminal-container {
-    width: 100%;
-    height: 100%;
+    position: absolute;
+    inset: 0;
     overflow: hidden;
+  }
+  .terminal-container :global(.xterm) {
+    height: 100%;
   }
   /* On mobile, allow horizontal scroll for readable font size */
   @media (max-width: 768px) {
