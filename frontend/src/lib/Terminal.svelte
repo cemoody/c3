@@ -26,7 +26,16 @@
   let paneRows = 0;
 
   export function write(data: Uint8Array) {
-    terminal?.write(data);
+    if (!terminal) return;
+    const wasAtBottom = isAtBottom();
+    terminal.write(data, () => {
+      // Guard against xterm.js viewport scroll corruption: if we were at the
+      // bottom before the write but aren't now, something (focus, reflow, or
+      // browser scroll anchoring) reset scrollTop — snap back to bottom.
+      if (wasAtBottom && !isAtBottom()) {
+        terminal.scrollToBottom();
+      }
+    });
   }
 
   export function scrollToBottom() {
@@ -34,7 +43,18 @@
   }
 
   export function focusTerminal() {
-    terminal?.focus();
+    if (!terminal?.textarea) return;
+    // Don't re-focus if already focused — avoids unnecessary scroll events
+    if (document.activeElement === terminal.textarea) return;
+    // Save viewport scroll position before focus. Some browsers ignore
+    // preventScroll:true and scroll the viewport to show the textarea,
+    // which corrupts xterm's scroll state and jumps to the top.
+    const viewport = containerEl?.querySelector('.xterm-viewport') as HTMLElement | null;
+    const savedScrollTop = viewport?.scrollTop;
+    terminal.focus();
+    if (viewport != null && savedScrollTop != null && viewport.scrollTop !== savedScrollTop) {
+      viewport.scrollTop = savedScrollTop;
+    }
   }
 
   export function isAtBottom(): boolean {
@@ -235,6 +255,9 @@
   }
   .terminal-container :global(.xterm) {
     height: 100%;
+  }
+  .terminal-container :global(.xterm-viewport) {
+    overflow-anchor: none;
   }
   /* On mobile, allow horizontal scroll for readable font size */
   @media (max-width: 768px) {
