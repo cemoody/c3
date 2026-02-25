@@ -1,11 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import type { Session } from './types';
 
   let { onSelect }: { onSelect: (target: string) => void } = $props();
-
-  type Pane = { index: string; currentCommand: string; target: string };
-  type Window = { index: string; name: string; panes: Pane[] };
-  type Session = { name: string; windows: Window[] };
 
   let sessions = $state<Session[]>([]);
   let currentTarget = $state('');

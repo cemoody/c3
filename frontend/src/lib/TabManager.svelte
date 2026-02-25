@@ -1,4 +1,6 @@
 <script lang="ts">
+  import Modal from './Modal.svelte';
+
   type TabItem = { target: string; label: string; windowName: string; command: string; claudeState: string };
 
   let {
@@ -142,177 +144,96 @@
     touchStartIdx = null;
     touchCurrentIdx = null;
   }
-
-  function handleBackdropClick(e: MouseEvent) {
-    if ((e.target as HTMLElement).classList.contains('tm-backdrop')) {
-      onClose();
-    }
-  }
-
-  function handleKeydown(e: KeyboardEvent) {
-    if (e.key === 'Escape') onClose();
-  }
 </script>
 
-<svelte:window onkeydown={handleKeydown} />
+<Modal title="Tabs" {onClose}>
+  <div class="tm-list" ontouchmove={onTouchMove} ontouchend={onTouchEnd}>
+    {#each targets as t, i}
+      <div
+        class="tm-row"
+        class:active={t.target === activeTarget}
+        class:drag-over={dragOverIdx === i && dragIdx !== i}
+        class:touch-over={touchCurrentIdx === i && touchStartIdx !== null && touchStartIdx !== i}
+        data-tab-idx={i}
+        draggable="true"
+        ondragstart={(e) => onDragStart(e, i)}
+        ondragover={(e) => onDragOver(e, i)}
+        ondrop={(e) => onDrop(e, i)}
+        ondragend={onDragEnd}
+        ontouchstart={() => onTouchStart(i)}
+      >
+        <span class="tm-drag-handle" title="Drag to reorder">&#9776;</span>
 
-<!-- svelte-ignore a11y_click_events_have_key_events -->
-<!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="tm-backdrop" onclick={handleBackdropClick}>
-  <div class="tm-panel">
-    <div class="tm-header">
-      <span class="tm-title">Tabs</span>
-      <button class="tm-close" onclick={onClose}>&times;</button>
-    </div>
+        {#if t.claudeState}
+          <span
+            class="tm-state-dot"
+            class:waiting={t.claudeState === 'waiting'}
+            class:active={t.claudeState === 'active'}
+            title={t.claudeState === 'waiting' ? 'Waiting for input' : 'Active'}
+          ></span>
+        {/if}
 
-    <div class="tm-list" ontouchmove={onTouchMove} ontouchend={onTouchEnd}>
-      {#each targets as t, i}
-        <div
-          class="tm-row"
-          class:active={t.target === activeTarget}
-          class:drag-over={dragOverIdx === i && dragIdx !== i}
-          class:touch-over={touchCurrentIdx === i && touchStartIdx !== null && touchStartIdx !== i}
-          data-tab-idx={i}
-          draggable="true"
-          ondragstart={(e) => onDragStart(e, i)}
-          ondragover={(e) => onDragOver(e, i)}
-          ondrop={(e) => onDrop(e, i)}
-          ondragend={onDragEnd}
-          ontouchstart={() => onTouchStart(i)}
-        >
-          <span class="tm-drag-handle" title="Drag to reorder">&#9776;</span>
-
-          {#if t.claudeState}
-            <span
-              class="tm-state-dot"
-              class:waiting={t.claudeState === 'waiting'}
-              class:active={t.claudeState === 'active'}
-              title={t.claudeState === 'waiting' ? 'Waiting for input' : 'Active'}
-            ></span>
-          {/if}
-
-          {#if editingTarget === t.target}
-            <input
-              class="tm-rename-input"
-              type="text"
-              bind:value={editValue}
-              onkeydown={handleRenameKeydown}
-              onblur={commitRename}
-              onclick={(e) => { e.preventDefault(); e.stopPropagation(); }}
-            />
-          {:else}
-            <button
-              class="tm-name"
-              onclick={() => { onNavigate(t.target); onClose(); }}
-              title="{t.target} — {t.command}"
-            >
-              {t.windowName}
-            </button>
-          {/if}
-
-          <button class="tm-edit-btn" onclick={(e) => startRename(t, e)} title="Rename">
-            &#9998;
-          </button>
-          <button
-            class="tm-kill-btn"
-            class:killing={killingTarget === t.target}
-            disabled={killingTarget === t.target}
-            onclick={async (e) => { e.stopPropagation(); killingTarget = t.target; await onKill(t.target); killingTarget = null; }}
-            title="Kill window"
-          >
-            {killingTarget === t.target ? '...' : '\u00d7'}
-          </button>
-        </div>
-      {/each}
-    </div>
-
-    <div class="tm-footer">
-      {#if creatingSession}
-        <div class="tm-new-row">
+        {#if editingTarget === t.target}
           <input
-            class="tm-new-input"
+            class="tm-rename-input"
             type="text"
-            placeholder="Session name..."
-            bind:value={newSessionName}
-            onkeydown={handleNewSessionKeydown}
+            bind:value={editValue}
+            onkeydown={handleRenameKeydown}
+            onblur={commitRename}
+            onclick={(e) => { e.preventDefault(); e.stopPropagation(); }}
           />
-          <button class="tm-new-confirm" onclick={handleNewSession} disabled={newSessionLoading || !newSessionName.trim()}>
-            {newSessionLoading ? '...' : 'Create'}
+        {:else}
+          <button
+            class="tm-name"
+            onclick={() => { onNavigate(t.target); onClose(); }}
+            title="{t.target} — {t.command}"
+          >
+            {t.windowName}
           </button>
-          <button class="tm-new-cancel" onclick={() => { creatingSession = false; newSessionName = ''; }}>
-            &times;
-          </button>
-        </div>
-      {:else}
-        <button class="tm-new-btn" onclick={() => { creatingSession = true; setTimeout(() => { const input = document.querySelector('.tm-new-input') as HTMLInputElement; if (input) input.focus(); }, 50); }}>
-          + New Session
+        {/if}
+
+        <button class="tm-edit-btn" onclick={(e) => startRename(t, e)} title="Rename">
+          &#9998;
         </button>
-      {/if}
-    </div>
+        <button
+          class="tm-kill-btn"
+          class:killing={killingTarget === t.target}
+          disabled={killingTarget === t.target}
+          onclick={async (e) => { e.stopPropagation(); killingTarget = t.target; await onKill(t.target); killingTarget = null; }}
+          title="Kill window"
+        >
+          {killingTarget === t.target ? '...' : '\u00d7'}
+        </button>
+      </div>
+    {/each}
   </div>
-</div>
+
+  <div class="tm-footer">
+    {#if creatingSession}
+      <div class="tm-new-row">
+        <input
+          class="tm-new-input"
+          type="text"
+          placeholder="Session name..."
+          bind:value={newSessionName}
+          onkeydown={handleNewSessionKeydown}
+        />
+        <button class="tm-new-confirm" onclick={handleNewSession} disabled={newSessionLoading || !newSessionName.trim()}>
+          {newSessionLoading ? '...' : 'Create'}
+        </button>
+        <button class="tm-new-cancel" onclick={() => { creatingSession = false; newSessionName = ''; }}>
+          &times;
+        </button>
+      </div>
+    {:else}
+      <button class="tm-new-btn" onclick={() => { creatingSession = true; setTimeout(() => { const input = document.querySelector('.tm-new-input') as HTMLInputElement; if (input) input.focus(); }, 50); }}>
+        + New Session
+      </button>
+    {/if}
+  </div>
+</Modal>
 
 <style>
-  .tm-backdrop {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.4);
-    z-index: 1000;
-    display: flex;
-    justify-content: flex-end;
-  }
-
-  .tm-panel {
-    width: 320px;
-    max-width: 100%;
-    height: 100%;
-    background: var(--bg-secondary);
-    border-left: 1px solid var(--border);
-    display: flex;
-    flex-direction: column;
-    animation: tm-slide-in 0.15s ease-out;
-  }
-
-  @keyframes tm-slide-in {
-    from { transform: translateX(100%); }
-    to { transform: translateX(0); }
-  }
-
-  @media (max-width: 480px) {
-    .tm-panel {
-      width: 100%;
-    }
-  }
-
-  .tm-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 12px 16px;
-    border-bottom: 1px solid var(--border);
-  }
-
-  .tm-title {
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--fg);
-  }
-
-  .tm-close {
-    background: none;
-    border: none;
-    color: var(--fg-dim);
-    font-size: 20px;
-    cursor: pointer;
-    padding: 4px 8px;
-    line-height: 1;
-    border-radius: 4px;
-  }
-  .tm-close:hover {
-    background: var(--bg);
-    color: var(--fg);
-  }
-
   .tm-list {
     flex: 1;
     overflow-y: auto;

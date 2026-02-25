@@ -1,11 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { ConnectionState, PaneState } from './websocket';
+  import type { Pane, Window, Session } from './types';
   import TabManager from './TabManager.svelte';
-
-  type Pane = { index: string; currentCommand: string; target: string; claudeState?: string; currentPath?: string };
-  type Window = { index: string; name: string; panes: Pane[] };
-  type Session = { name: string; windows: Window[] };
 
   let {
     connectionState = 'disconnected',
@@ -30,20 +27,12 @@
 
   const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
-  const stateColors: Record<ConnectionState, string> = {
-    live: 'var(--success)',
-    replaying: 'var(--warning)',
-    connecting: 'var(--warning)',
-    disconnected: 'var(--error)',
-    error: 'var(--error)',
-  };
-
-  const stateLabels: Record<ConnectionState, string> = {
-    live: 'Live',
-    replaying: 'Replaying...',
-    connecting: 'Connecting...',
-    disconnected: 'Disconnected',
-    error: 'Error',
+  const stateConfig: Record<ConnectionState, { color: string; label: string }> = {
+    live: { color: 'var(--success)', label: 'Live' },
+    replaying: { color: 'var(--warning)', label: 'Replaying...' },
+    connecting: { color: 'var(--warning)', label: 'Connecting...' },
+    disconnected: { color: 'var(--error)', label: 'Disconnected' },
+    error: { color: 'var(--error)', label: 'Error' },
   };
 
   let editingTarget = $state<string | null>(null);
@@ -108,15 +97,7 @@
     editingTarget = null;
 
     if (!name) return;
-
-    try {
-      await fetch('/api/rename', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ target: tgt, name }),
-      });
-      await fetchSessions();
-    } catch {}
+    await doRename(tgt, name);
   }
 
   function handleRenameKeydown(e: KeyboardEvent) {
@@ -364,9 +345,9 @@
     {/each}
   </div>
   <span class="status-indicator">
-    <span class="dot" style:background={stateColors[connectionState]}></span>
+    <span class="dot" style:background={stateConfig[connectionState].color}></span>
     {#if !isMobile}
-      <span class="status-label">{stateLabels[connectionState]}</span>
+      <span class="status-label">{stateConfig[connectionState].label}</span>
     {/if}
   </span>
   {#if !isMobile}

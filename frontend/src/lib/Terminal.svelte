@@ -74,7 +74,6 @@
     paneRows = rows;
 
     const fontSize = calcFontSize(cols);
-    terminal.options.fontSize = fontSize;
 
     let effectiveRows = rows;
     if (isMobile && containerEl) {
@@ -87,11 +86,26 @@
       }
     }
 
-    terminal.resize(cols, effectiveRows);
+    // Skip if nothing actually changed — unnecessary resize() calls on large
+    // scrollback buffers trigger reflows that can reset the viewport position.
+    const fontChanged = terminal.options.fontSize !== fontSize;
+    const dimsChanged = terminal.cols !== cols || terminal.rows !== effectiveRows;
+    if (!fontChanged && !dimsChanged) return;
+
+    const wasAtBottom = isAtBottom();
+
+    if (fontChanged) terminal.options.fontSize = fontSize;
+    if (dimsChanged) terminal.resize(cols, effectiveRows);
+
     // Re-focus after resize — resizing can drop focus
     if (!isMobile) terminal.focus();
-    // On mobile, scroll to bottom so the input prompt is visible
-    terminal.scrollToBottom();
+
+    // Restore scroll position after the render settles. Only auto-scroll to
+    // bottom if the viewport was already there; otherwise respect the user's
+    // scroll position (they may be reading earlier output).
+    if (wasAtBottom || isMobile) {
+      requestAnimationFrame(() => terminal?.scrollToBottom());
+    }
   }
 
   onMount(() => {

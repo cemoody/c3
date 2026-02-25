@@ -1,4 +1,6 @@
 <script lang="ts">
+  import Modal from './Modal.svelte';
+
   let {
     fontSize,
     onFontSizeChange,
@@ -23,119 +25,38 @@
     sliderValue = 12;
     onFontSizeChange(null);
   }
-
-  function handleBackdropClick(e: MouseEvent) {
-    if ((e.target as HTMLElement).classList.contains('settings-backdrop')) {
-      onClose();
-    }
-  }
-
-  function handleKeydown(e: KeyboardEvent) {
-    if (e.key === 'Escape') onClose();
-  }
 </script>
 
-<svelte:window onkeydown={handleKeydown} />
-
-<!-- svelte-ignore a11y_click_events_have_key_events -->
-<!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="settings-backdrop" onclick={handleBackdropClick}>
-  <div class="settings-panel">
-    <div class="settings-header">
-      <span class="settings-title">Settings</span>
-      <button class="settings-close" onclick={onClose}>&times;</button>
-    </div>
-
-    <div class="settings-body">
-      <div class="setting-group">
-        <label class="setting-label" for="font-size-slider">
-          Font Size
-          <span class="setting-value">{fontSize !== null ? `${sliderValue}px` : 'Auto'}</span>
-        </label>
-        <div class="slider-row">
-          <span class="slider-bound">4</span>
-          <input
-            id="font-size-slider"
-            type="range"
-            min="4"
-            max="18"
-            step="1"
-            value={sliderValue}
-            oninput={handleSlider}
-            class="font-slider"
-          />
-          <span class="slider-bound">18</span>
-        </div>
-        <div class="setting-actions">
-          <button class="action-btn" onclick={onFitWidth}>Fit to Screen</button>
-          <button class="action-btn secondary" onclick={handleReset}>Reset to Auto</button>
-        </div>
+<Modal title="Settings" {onClose} panelWidth="300px">
+  <div class="settings-body">
+    <div class="setting-group">
+      <label class="setting-label" for="font-size-slider">
+        Font Size
+        <span class="setting-value">{fontSize !== null ? `${sliderValue}px` : 'Auto'}</span>
+      </label>
+      <div class="slider-row">
+        <span class="slider-bound">4</span>
+        <input
+          id="font-size-slider"
+          type="range"
+          min="4"
+          max="18"
+          step="1"
+          value={sliderValue}
+          oninput={handleSlider}
+          class="font-slider"
+        />
+        <span class="slider-bound">18</span>
+      </div>
+      <div class="setting-actions">
+        <button class="action-btn" onclick={onFitWidth}>Fit to Screen</button>
+        <button class="action-btn secondary" onclick={handleReset}>Reset to Auto</button>
       </div>
     </div>
   </div>
-</div>
+</Modal>
 
 <style>
-  .settings-backdrop {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.4);
-    z-index: 1000;
-    display: flex;
-    justify-content: flex-end;
-  }
-
-  .settings-panel {
-    width: 300px;
-    max-width: 100%;
-    height: 100%;
-    background: var(--bg-secondary);
-    border-left: 1px solid var(--border);
-    display: flex;
-    flex-direction: column;
-    animation: settings-slide-in 0.15s ease-out;
-  }
-
-  @keyframes settings-slide-in {
-    from { transform: translateX(100%); }
-    to { transform: translateX(0); }
-  }
-
-  @media (max-width: 480px) {
-    .settings-panel {
-      width: 100%;
-    }
-  }
-
-  .settings-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 12px 16px;
-    border-bottom: 1px solid var(--border);
-  }
-
-  .settings-title {
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--fg);
-  }
-
-  .settings-close {
-    background: none;
-    border: none;
-    color: var(--fg-dim);
-    font-size: 20px;
-    cursor: pointer;
-    padding: 4px 8px;
-    line-height: 1;
-    border-radius: 4px;
-  }
-  .settings-close:hover {
-    background: var(--bg);
-    color: var(--fg);
-  }
-
   .settings-body {
     padding: 16px;
     flex: 1;

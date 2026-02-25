@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { marked } from 'marked';
+  import { isImage, isMarkdown, isTextFile, isPreviewable, isPlot } from './fileTypes';
 
   type FileEntry = { name: string; isDir: boolean; size: number };
 
@@ -75,44 +76,21 @@
     return (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' GB';
   }
 
-  function isImage(name: string): boolean {
-    return /\.(png|jpg|jpeg|gif|webp|svg|bmp)$/i.test(name);
-  }
-
-  function isMarkdown(name: string): boolean {
-    return /\.(md|markdown|mdx)$/i.test(name);
-  }
-
-  function isTextFile(name: string): boolean {
-    return /\.(txt|log|csv|json|yaml|yml|toml|xml|py|js|ts|jsx|tsx|sh|bash|zsh|go|rs|c|cpp|h|hpp|java|rb|php|css|scss|less|sql|r|lua|env|ini|conf|cfg|svelte|vue|swift|kt|scala|makefile|dockerfile)$/i.test(name)
-      || /^(Makefile|Dockerfile|Rakefile|Gemfile|Procfile)$/i.test(name);
-  }
-
-  function isPreviewable(name: string): boolean {
-    return isImage(name) || isMarkdown(name) || isTextFile(name);
-  }
-
-  function isPlot(name: string): boolean {
-    return /\.(png|jpg|jpeg|gif|webp|svg|pdf|html|md)$/i.test(name);
-  }
-
-  // Search results are absolute paths from the server
-  function resolveSearchResult(absPath: string): string {
-    return absPath;
-  }
 
   async function openFilePath(filePath: string) {
     const name = filePath.split('/').pop() || filePath;
     if (isImage(name)) {
-      // Close markdown preview if open
-      mdPreviewPath = '';
       previewUrl = `/api/files/raw?path=${encodeURIComponent(filePath)}`;
+      mdPreviewPath = '';
+      textPreviewContent = null;
       previewName = name;
       previewFullPath = filePath;
     } else if (isMarkdown(name)) {
-      // Close image preview if open
       previewUrl = null;
+      textPreviewContent = null;
       await openMarkdown(filePath);
+    } else if (name.endsWith('.html') || name.endsWith('.pdf')) {
+      window.open(`/api/files/raw?path=${encodeURIComponent(filePath)}`, '_blank');
     } else if (isTextFile(name)) {
       previewUrl = null;
       mdPreviewPath = '';
@@ -125,8 +103,6 @@
           textPreviewContent = await res.text();
         }
       } catch {}
-    } else if (name.endsWith('.html') || name.endsWith('.pdf')) {
-      window.open(`/api/files/raw?path=${encodeURIComponent(filePath)}`, '_blank');
     } else {
       const dir = filePath.replace(/\/[^/]+$/, '');
       loadDir(dir);
@@ -200,7 +176,7 @@
       const name = searchResults[idx].split('/').pop() || '';
       if (isPreviewable(name)) {
         selectedIndex = idx;
-        const fullPath = resolveSearchResult(searchResults[idx]);
+        const fullPath = searchResults[idx];
         openFilePath(fullPath);
         scrollResultIntoView(idx);
         return;
@@ -245,7 +221,7 @@
 
   function previewSelectedResult() {
     if (searchResults.length === 0) return;
-    const fullPath = resolveSearchResult(searchResults[selectedIndex]);
+    const fullPath = searchResults[selectedIndex];
     openFilePath(fullPath);
   }
 
